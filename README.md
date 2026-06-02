@@ -236,7 +236,6 @@ Explore the comprehensive technical references and guides for Kuargogo:
 *   🧠 **[System Architecture](docs/ARCHITECTURE.md)**: Software layer charts, telemetry flows, and self-healing systems.
 *   🗺️ **[Project Roadmap](docs/ROADMAP.md)**: Completed milestones and planned feature updates.
 *   📦 **[Release Guide](docs/RELEASING.md)**: Step-by-step pipeline to tag and distribute new versions.
-*   🔄 **[Lip Gloss v2 Upgrade Guide](docs/UPGRADE_GUIDE_V2.md)**: Migration guide for the Charm Lip Gloss interface.
 
 ---
 
