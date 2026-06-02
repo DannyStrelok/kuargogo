@@ -15,7 +15,7 @@ require (
 	github.com/blang/semver v3.5.1+incompatible
 	github.com/briandowns/spinner v1.23.2
 	github.com/charmbracelet/x/ansi v0.11.7
-	github.com/cloudflare/cloudflare-go v0.116.0
+	github.com/cloudflare/cloudflare-go v0.117.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.19.0
 	github.com/fsnotify/fsnotify v1.10.1
