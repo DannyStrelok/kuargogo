@@ -1,0 +1,45 @@
+---
+# =================================================================
+# NFS client setup
+# =================================================================
+- name: NFS Client Tasks (Only if enabled)
+  block:
+    - name: Install NFS client packages
+      apt:
+        name:
+          - nfs-common
+        state: present
+        update_cache: true
+
+    - name: Create mount point directories
+      file:
+        path: "{{ item.dest }}"
+        state: directory
+        mode: "0755"
+      loop: "{{ nfs_shares }}"
+
+    - name: Add NFS mounts to /etc/fstab
+      mount:
+        path: "{{ item.dest }}"
+        src: "{{ nfs_server }}:{{ item.src }}"
+        fstype: nfs
+        opts: "{{ item.opts }}"
+        state: mounted
+      loop: "{{ nfs_shares }}"
+
+    - name: Verify mounts are active in /proc/mounts
+      shell: grep -q "{{ item.dest }}" /proc/mounts
+      loop: "{{ nfs_shares }}"
+      register: mount_verify
+      changed_when: false
+      failed_when: mount_verify.rc != 0
+
+    - name: Display mount status
+      debug:
+        msg: |
+          ✅ NFS Mounts successfully synchronized on {{ inventory_hostname }}:
+          {% for share in nfs_shares %}
+          - {{ nfs_server }}:{{ share.src }} -> {{ share.dest }} (Status: Active)
+          {% endfor %}
+  when: nfs_enabled | bool
+  tags: [nfs]

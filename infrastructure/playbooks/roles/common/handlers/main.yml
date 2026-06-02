@@ -1,0 +1,23 @@
+---
+- name: Reload Sysctl
+  command: sysctl --system
+
+- name: Reload UFW
+  ufw:
+    state: reloaded
+
+- name: Restart SSH
+  systemd:
+    name: ssh
+    state: restarted
+
+- name: Restart Journald
+  systemd:
+    name: systemd-journald
+    state: restarted
+
+
+- name: Restart Watchdog
+  debug:
+    msg: "Watchdog daemon is now handled natively by systemd. No restart required."
+  tags: [hardware]

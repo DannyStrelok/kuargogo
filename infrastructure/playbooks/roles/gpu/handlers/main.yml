@@ -1,0 +1,8 @@
+---
+- name: Update Apt
+  apt:
+    update_cache: true
+
+- name: Reload Systemd
+  systemd:
+    daemon_reload: true

@@ -1,0 +1,9 @@
+---
+- name: Drain K3s Node
+  hosts: k3s_cluster
+  become: true
+  tasks:
+    - name: Run K3s drain
+      import_role:
+        name: k3s
+        tasks_from: drain

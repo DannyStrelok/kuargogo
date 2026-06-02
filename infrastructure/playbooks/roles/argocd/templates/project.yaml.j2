@@ -1,0 +1,15 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: "{{ item.name }}"
+  namespace: "{{ argocd_namespace }}"
+spec:
+  description: "{{ item.description | default('Project managed by kuargogo') }}"
+  sourceRepos:
+    - "*"
+  destinations:
+    - namespace: "*"
+      server: "https://kubernetes.default.svc"
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"

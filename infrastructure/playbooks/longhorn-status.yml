@@ -1,0 +1,13 @@
+---
+- name: Check Longhorn Status
+  hosts: server[0]
+  become: true
+  tasks:
+    - name: Get Longhorn System Pods Status
+      command: kubectl get pods -n longhorn-system --no-headers
+      register: pod_status
+      changed_when: false
+      
+    - name: Display Status
+      debug:
+        msg: "{{ pod_status.stdout_lines }}"

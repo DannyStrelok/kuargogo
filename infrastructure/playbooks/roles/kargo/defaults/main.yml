@@ -1,0 +1,6 @@
+---
+kargo_namespace: "kargo"
+kargo_chart_version: "1.10.4"
+kargo_ingress_host: "kargo.homelab"
+kargo_admin_password_hash: ""
+kargo_token_signing_key: "C#$I6Qxb90Eb4u^3ILK6WK7J"

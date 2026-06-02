@@ -1,0 +1,4 @@
+---
+argocd_namespace: "argocd"
+argocd_chart_version: "9.5.15"
+argocd_ingress_host: "argocd.localhost"

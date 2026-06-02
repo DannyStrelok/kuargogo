@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kgg-mqtt-bridge-script
+  namespace: monitoring
+data:
+  bridge.py: |
+{{ lookup('template', 'alertmanager-bridge.py.j2') | indent(4, first=True) }}
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kgg-mqtt-bridge
+  namespace: monitoring
+  labels:
+    app: kgg-mqtt-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kgg-mqtt-bridge
+  template:
+    metadata:
+      labels:
+        app: kgg-mqtt-bridge
+    spec:
+      containers:
+      - name: bridge
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install paho-mqtt
+            python /app/bridge.py
+        env:
+        - name: MQTT_HOST
+          value: "{{ mqtt_broker_host }}"
+        - name: MQTT_PORT
+          value: "{{ mqtt_broker_port }}"
+        - name: MQTT_TOPIC
+          value: "rack/alerts"
+        - name: GRAFANA_URL
+          value: "https://grafana.{{ cloudflare_domain }}"
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: script
+          mountPath: /app/bridge.py
+          subPath: bridge.py
+      volumes:
+      - name: script
+        configMap:
+          name: kgg-mqtt-bridge-script
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kgg-mqtt-bridge
+  namespace: monitoring
+spec:
+  selector:
+    app: kgg-mqtt-bridge
+  ports:
+  - port: 80
+    targetPort: 8080

@@ -1,0 +1,5 @@
+mirrors:
+  "docker.io":
+    endpoint:
+      - "http://{{ registry_cache_ip | default('10.43.0.250') }}:{{ registry_cache_port | default('5000') }}"
+      - "https://registry-1.docker.io"

@@ -1,0 +1,23 @@
+[Unit]
+Description=Kuargogo Infrastructure Super-Agent
+After=network.target mosquitto.service
+
+[Service]
+ExecStart={{ kgg_agent_home }}/kgg-env/bin/python {{ kgg_agent_home }}/kgg_agent.py
+WorkingDirectory={{ kgg_agent_home }}
+Restart=always
+User={{ kgg_agent_user }}
+Environment=PYTHONUNBUFFERED=1
+Environment="KGG_BIN=/usr/local/bin/kgg"
+Environment="KGG_HARDWARE_ENABLED={{ kgg_hardware_enabled | default('false') }}"
+Environment="KGG_SERIAL_PORT={{ kgg_serial_port | default('/dev/ttyUSB0') }}"
+Environment='KGG_NODES={{ nodes | default("[]") }}'
+Environment="KGG_CLUSTER_KEY_PATH={{ kgg_cluster_private_key_path }}"
+Environment="KGG_WOL_INTERFACE={{ kgg_wol_interface | default('eth0') }}"
+Environment="KGG_NODE_NAME={{ kgg_node_name | default(ansible_hostname) }}"
+Environment="KGG_MASTER_PASSPHRASE={{ kgg_master_passphrase | default('') }}"
+RuntimeDirectory=kgg-agent
+PIDFile=/run/kgg-agent/kgg-agent.pid
+
+[Install]
+WantedBy=multi-user.target

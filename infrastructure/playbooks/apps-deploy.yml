@@ -1,0 +1,11 @@
+---
+# apps.yml - Abstract deployment playbook for K3s apps
+- name: Deploy Kubernetes Application
+  hosts: all
+  become: true
+  tasks:
+    - name: Apply Kubernetes Manifest
+      kubernetes.core.k8s:
+        state: present
+        definition: "{{ lookup('file', manifest_file) | from_yaml_all | list }}"
+      when: manifest_file is defined

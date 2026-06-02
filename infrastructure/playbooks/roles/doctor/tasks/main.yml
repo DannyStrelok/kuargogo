@@ -1,0 +1,39 @@
+---
+# =================================================================
+# Health check metrics collection
+# =================================================================
+- name: Get CPU temperature
+  shell: |
+    if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+      temp=$(cat /sys/class/thermal/thermal_zone0/temp)
+      echo $((temp / 1000))
+    else
+      echo "N/A"
+    fi
+  register: cpu_temp
+  changed_when: false
+
+- name: Get disk usage
+  shell: df -h / | tail -1 | awk '{print $5}'
+  register: disk_usage
+  changed_when: false
+
+- name: Get memory usage
+  shell: free -m | awk '/^Mem:/{printf "%.0f", ($3/$2)*100}'
+  register: mem_usage
+  changed_when: false
+
+- name: Get load average
+  shell: uptime | awk -F'load average:' '{print $2}' | awk -F',' '{print $1}' | tr -d ' '
+  register: load_avg
+  changed_when: false
+
+- name: Get uptime
+  shell: uptime -p
+  register: uptime_info
+  changed_when: false
+
+- name: Output metrics as JSON line
+  debug:
+    msg: >-
+      METRICS_JSON:{"host":"{{ inventory_hostname }}","ip":"{{ ansible_host }}","cpu_temp":"{{ cpu_temp.stdout }}","disk":"{{ disk_usage.stdout }}","mem":"{{ mem_usage.stdout }}%","load":"{{ load_avg.stdout }}","uptime":"{{ uptime_info.stdout }}"}

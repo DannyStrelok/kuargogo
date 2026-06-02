@@ -1,0 +1,56 @@
+---
+- name: Basic Node Provisioning
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+  vars:
+    ansible_ssh_extra_args: "-o StrictHostKeyChecking=accept-new"
+  roles:
+    - common
+    - k3s-prep
+    - unattended-upgrades
+
+  tasks:
+    # =================================================================
+    # REBOOT (If Required)
+    # =================================================================
+    - name: Check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      tags: [reboot]
+
+    - name: Reboot node and wait to come back
+      reboot:
+        msg: "Reboot initiated by kuargogo provisioning"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when: reboot_required.stat.exists
+      tags: [reboot]
+
+    # =================================================================
+    # SANITY CHECKS (Post-Provisioning)
+    # =================================================================
+    - name: Verify Swap is disabled
+      command: swapon --show
+      register: swap_status
+      changed_when: false
+      failed_when: swap_status.stdout != ""
+      tags: [verify]
+
+    - name: Verify Kernel Modules are loaded
+      shell: |
+        for mod in overlay br_netfilter dm_crypt {% if ansible_architecture == 'x86_64' %}mei_me{% endif %}; do
+          mod_name=$(echo $mod | tr '_' '-')
+          lsmod | grep -qE "^$mod|^$mod_name" || [ -d "/sys/module/$mod" ] || [ -d "/sys/module/$mod_name" ] || exit 1
+        done
+      changed_when: false
+      tags: [verify]
+
+    - name: Display provisioning success
+      debug:
+        msg: "✅ Node {{ inventory_hostname }} is ready for K3s installation!"
+      tags: [verify]

@@ -1,0 +1,56 @@
+---
+- name: Set Helm architecture mapping
+  set_fact:
+    helm_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
+- name: Check current Helm version
+  command: helm version --short
+  register: helm_current_version
+  failed_when: false
+  changed_when: false
+
+- name: Determine if Helm install/upgrade is needed
+  set_fact:
+    helm_needs_install: >-
+      {{ helm_current_version.rc != 0 or
+         (helm_version not in (helm_current_version.stdout | default(''))) }}
+
+- name: Download Helm {{ helm_version }} tarball
+  get_url:
+    url: "https://get.helm.sh/helm-{{ helm_version }}-linux-{{ helm_arch }}.tar.gz"
+    dest: /tmp/helm.tar.gz
+    mode: "0644"
+  when: helm_needs_install | bool
+
+- name: Extract Helm binary
+  unarchive:
+    src: /tmp/helm.tar.gz
+    dest: /tmp/
+    remote_src: true
+  when: helm_needs_install | bool
+
+- name: Install Helm binary to /usr/local/bin
+  copy:
+    src: "/tmp/linux-{{ helm_arch }}/helm"
+    dest: /usr/local/bin/helm
+    mode: "0755"
+    remote_src: true
+  when: helm_needs_install | bool
+
+- name: Clean up Helm temp files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /tmp/helm.tar.gz
+    - "/tmp/linux-{{ helm_arch }}"
+  when: helm_needs_install | bool
+
+- name: Verify Helm installation
+  command: helm version --short
+  register: helm_verify
+  changed_when: false
+
+- name: Display installed Helm version
+  debug:
+    msg: "✅ Helm {{ helm_verify.stdout }} installed"

@@ -1,0 +1,8 @@
+---
+create_user: true
+kgg_user: kgg-admin
+kgg_timezone: "UTC"
+ssh_harden: false
+kgg_heal_identity: false
+
+# Support for hardware watchdog moved to infra-agent role

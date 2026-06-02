@@ -1,0 +1,6 @@
+---
+- name: Setup NVIDIA GPU and Container Toolkit
+  hosts: gpu_nodes
+  become: true
+  roles:
+    - role: gpu

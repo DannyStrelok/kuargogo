@@ -1,0 +1,61 @@
+---
+# cluster-deploy.yml
+# Unified K3s cluster deployment orchestrated in waves to ensure HA stability.
+
+- name: "Wave 1: Initialize Primary Master"
+  hosts: server[0]
+  become: true
+  tasks:
+    - name: Wave 1 | Ensure NTP Sync (Prevention of Etcd skew)
+      command: timedatectl show --property=NTPSynchronized --value
+      register: ntp_sync
+      until: ntp_sync.stdout == "yes"
+      retries: 30
+      delay: 5
+      changed_when: false
+      tags: [preflight, ntp]
+
+  roles:
+    - k3s
+  post_tasks:
+    - name: Wave 1 | Wait for API to be ready (Local)
+      wait_for:
+        port: 6443
+        delay: 5
+        timeout: 60
+
+    - name: Wave 1 | Wait for VIP to be available (Interior Pulse)
+      wait_for:
+        host: "{{ k3s_vip_ip }}"
+        port: 6443
+        delay: 5
+        timeout: 120
+      when: k3s_ha | bool and k3s_vip_ip is defined and k3s_vip_ip != ""
+      tags: [vip, health]
+
+- name: "Wave 2: Join Additional Servers (HA Sync)"
+  hosts: server[1:]
+  become: true
+  serial: 1
+  pre_tasks:
+    - name: Wave 2 | Wait for VIP to be available (Exterior Pulse)
+      wait_for:
+        host: "{{ k3s_vip_ip if (k3s_vip_ip is defined and k3s_vip_ip != '') else hostvars[groups['server'][0]].ansible_host }}"
+        port: 6443
+        delay: 10
+        timeout: 120
+      tags: [vip, health]
+
+  roles:
+    - k3s
+
+  post_tasks:
+    - name: Wave 2 | Wait for node sync
+      pause:
+        seconds: 10
+
+- name: "Wave 3: Join Worker Nodes"
+  hosts: agent
+  become: true
+  roles:
+    - k3s

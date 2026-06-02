@@ -1,0 +1,6 @@
+---
+- name: Deploy Velero Disaster Recovery
+  hosts: server[0]
+  become: true
+  roles:
+    - velero

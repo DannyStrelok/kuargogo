@@ -1,0 +1,69 @@
+---
+- name: Deploy Longhorn Manifest
+  kubernetes.core.k8s:
+    state: present
+    src: https://raw.githubusercontent.com/longhorn/longhorn/v1.11.1/deploy/longhorn.yaml
+  tags: [storage, longhorn]
+
+- name: Wait for Longhorn Manager to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: DaemonSet
+    name: longhorn-manager
+    namespace: longhorn-system
+  register: lh_manager
+  until: >
+    lh_manager.resources is defined and
+    lh_manager.resources | length > 0 and
+    lh_manager.resources[0].status.numberReady | default(0) > 0
+  retries: 30
+  delay: 10
+  tags: [storage, longhorn]
+
+- name: Wait for Longhorn CRDs to be established
+  kubernetes.core.k8s_info:
+    api_version: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    name: settings.longhorn.io
+  register: lh_crds
+  until: >
+    lh_crds.resources is defined and
+    lh_crds.resources | length > 0
+  retries: 30
+  delay: 10
+  tags: [storage, longhorn]
+
+- name: Configure Longhorn Settings
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: longhorn.io/v1beta2
+      kind: Setting
+      metadata:
+        name: "{{ item.name }}"
+        namespace: longhorn-system
+      value: "{{ item.value }}"
+  loop:
+    - { name: "storage-over-provisioning-percentage", value: "100" }
+    - { name: "storage-minimal-available-percentage", value: "20" }
+    - { name: "guaranteed-engine-cpu", value: "2" }
+    - { name: "default-replica-count", value: "3" }
+    - { name: "auto-salvage", value: "true" }
+    - { name: "node-down-pod-deletion-policy", value: "delete-both-statefulset-and-deployment-pod" }
+  register: longhorn_settings
+  until: longhorn_settings is not failed
+  retries: 10
+  delay: 5
+  tags: [storage, longhorn]
+
+- name: Ensure Longhorn is the default StorageClass
+  kubernetes.core.k8s:
+    state: patched
+    api_version: storage.k8s.io/v1
+    kind: StorageClass
+    name: longhorn
+    definition:
+      metadata:
+        annotations:
+          storageclass.kubernetes.io/is-default-class: "true"
+  tags: [storage, longhorn]

@@ -1,0 +1,20 @@
+---
+observability_namespace: "monitoring"
+prometheus_chart_version: "66.3.0" # kube-prometheus-stack
+loki_chart_version: "2.10.2"       # loki-stack
+tempo_chart_version: "1.10.0"      # grafana/tempo
+
+# Retention policies
+prometheus_retention: "15d"
+loki_retention: "15d"
+tempo_retention: "48h"
+
+# Storage
+prometheus_storage_size: "20Gi"
+loki_storage_size: "20Gi"
+tempo_storage_size: "5Gi"
+grafana_storage_size: "5Gi"
+
+# Grafana
+grafana_admin_password: "admin"
+grafana_ingress_host: "grafana.localhost"

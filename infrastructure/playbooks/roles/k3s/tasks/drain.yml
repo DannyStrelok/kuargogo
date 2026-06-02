@@ -1,0 +1,19 @@
+---
+# =================================================================
+# Drain node from K3s cluster
+# =================================================================
+- name: Drain target node
+  command: >
+    k3s kubectl drain {{ target_node_name }}
+    --ignore-daemonsets
+    --delete-emptydir-data
+    --force
+    --timeout=120s
+  register: drain_result
+  changed_when: true
+  tags: [drain]
+
+- name: Display drain result
+  debug:
+    msg: "{{ drain_result.stdout_lines }}"
+  tags: [drain]

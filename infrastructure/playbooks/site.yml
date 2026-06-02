@@ -1,0 +1,61 @@
+---
+# site.yml - Full Cluster Deploy
+# Orchestrates the complete setup sequence:
+#   1. Provision all nodes (OS hardening, packages, firewall)
+#   2. GPU setup on capable nodes
+#   3. Initialize K3s on the first control-plane node
+#   4. Join remaining nodes to the cluster
+#   5. Wait for cluster health
+#   6. Deploy storage and platform services
+
+# =================================================================
+# Step 1: Provision all nodes
+# =================================================================
+- import_playbook: provision.yml
+
+# =================================================================
+# Step 2: GPU setup (skips nodes without GPU)
+# =================================================================
+- import_playbook: gpu-setup.yml
+
+# =================================================================
+# Step 3: K3s Cluster Deployment (HA Orchestration)
+# =================================================================
+- import_playbook: cluster-deploy.yml
+
+# =================================================================
+# Step 5: Cluster Health Gate & VIP Verification
+# =================================================================
+- name: Ensure cluster and VIP are responsive before deploying features
+  hosts: server[0]
+  become: true
+  tasks:
+    - name: Wait for all expected nodes to join the cluster
+      command: k3s kubectl get nodes --no-headers
+      register: current_nodes
+      until: current_nodes.stdout_lines | length == groups['k3s_cluster'] | length
+      retries: 40
+      delay: 15
+      changed_when: false
+      tags: [features]
+
+    - name: Wait for all expected nodes to be Ready
+      shell: "k3s kubectl get nodes | grep ' Ready ' | wc -l"
+      register: ready_nodes
+      until: (ready_nodes.stdout | trim | int) == (groups['k3s_cluster'] | length)
+      retries: 40
+      delay: 15
+      changed_when: false
+      tags: [features]
+
+# =================================================================
+# Step 6: Platform Features (Registry Cache, NFS)
+# =================================================================
+- import_playbook: registry-cache.yml
+- import_playbook: setup-nfs.yml
+
+# =================================================================
+# Step 7: Distributed Storage & Databases
+# =================================================================
+- import_playbook: longhorn.yml
+- import_playbook: postgres.yml

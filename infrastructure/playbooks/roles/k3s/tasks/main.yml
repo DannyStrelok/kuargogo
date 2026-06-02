@@ -1,0 +1,170 @@
+---
+# =================================================================
+# Unified K3s Lifecycle (Server & Agent)
+# =================================================================
+
+# -----------------------------------------------------------------
+# Task 1: Pre-flight & Cleanup (Optional)
+# -----------------------------------------------------------------
+- name: Determine k3s type
+  set_fact:
+    k3s_type: "{{ 'server' if inventory_hostname in groups['server'] else 'agent' }}"
+    k3s_uninstall_script: "{{ '/usr/local/bin/k3s-uninstall.sh' if inventory_hostname in groups['server'] else '/usr/local/bin/k3s-agent-uninstall.sh' }}"
+  tags: [k3s, install]
+
+- name: Check if K3s is already installed
+  stat:
+    path: "{{ k3s_uninstall_script }}"
+  register: k3s_installed
+  tags: [k3s, install]
+
+- name: Purge previous K3s installation (Scorched Earth - Optional)
+  block:
+    - name: Run uninstall script
+      shell: "{{ k3s_uninstall_script }}"
+      failed_when: false
+    
+    - name: Purge residual data directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /var/lib/rancher/k3s
+        - /etc/rancher/k3s
+        - /run/k3s
+        - /var/lib/kubelet
+        - /var/lib/cni
+        - /etc/cni
+        - /var/lib/longhorn
+  when: 
+    - k3s_installed.stat.exists
+    - k3s_force_purge | default(false) | bool
+  tags: [k3s, install, purge]
+
+# -----------------------------------------------------------------
+# Task 2: Configuration (Declarative)
+# -----------------------------------------------------------------
+- name: Ensure K3s directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /etc/rancher/k3s
+    - /var/lib/rancher/k3s/server/manifests
+  tags: [k3s, install, config]
+
+- name: Write K3s configuration (config.yaml)
+  template:
+    src: config.yaml.j2
+    dest: /etc/rancher/k3s/config.yaml
+    mode: "0644"
+  notify: Restart K3s
+  tags: [k3s, install, config]
+
+- name: Write K3s registries configuration (registries.yaml)
+  template:
+    src: registries.yaml.j2
+    dest: /etc/rancher/k3s/registries.yaml
+    mode: "0644"
+  notify: Restart K3s
+  tags: [k3s, install, config]
+
+# -----------------------------------------------------------------
+# Task 3: Installation
+# -----------------------------------------------------------------
+- name: Download and execute K3s installer
+  shell: "curl -sfL https://get.k3s.io | sh -s - {{ k3s_type }}"
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    K3S_TOKEN: "{{ k3s_token | default(omit) }}"
+  register: k3s_install_result
+  changed_when: "'k3s is up to date' not in k3s_install_result.stdout"
+  tags: [k3s, install]
+
+- name: Wait for K3s local health (node-token)
+  wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    timeout: 120
+  when: k3s_type == 'server'
+  tags: [k3s, install]
+
+- name: Extract Node Token (First Server Only)
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_slurped_token
+  when: 
+    - inventory_hostname == groups['server'][0]
+    - k3s_token is not defined or k3s_token == ""
+  tags: [k3s, install, token]
+
+- name: Output Cluster Token for CLI capture
+  debug:
+    msg: "CLUSTER_TOKEN={{ k3s_slurped_token.content | b64decode | trim }}"
+  when: 
+    - inventory_hostname == groups['server'][0]
+    - k3s_slurped_token.content is defined
+  tags: [k3s, install, token]
+
+- name: Wait for this node to be Ready
+  shell: |
+    k3s kubectl get node {{ ansible_hostname }} --no-headers | awk '{print $2}'
+  register: node_status
+  until: node_status.stdout | trim == "Ready"
+  retries: 40
+  delay: 10
+  changed_when: false
+  tags: [k3s, install, health]
+
+# -----------------------------------------------------------------
+# Task 4: Kubeconfig Setup (Master only)
+# -----------------------------------------------------------------
+- name: Setup kubeconfig for root user
+  block:
+    - name: Create .kube directory
+      file:
+        path: /root/.kube
+        state: directory
+        mode: "0700"
+
+    - name: Symlink k3s.yaml to config
+      file:
+        src: /etc/rancher/k3s/k3s.yaml
+        dest: /root/.kube/config
+        state: link
+  when: k3s_type == 'server'
+  tags: [k3s, config]
+
+# -----------------------------------------------------------------
+# Task 5: Helm Installation (Servers only)
+# -----------------------------------------------------------------
+- name: Install Helm binary
+  include_tasks: helm.yml
+  when: k3s_type == 'server'
+  tags: [k3s, helm]
+
+# -----------------------------------------------------------------
+# Task 6: Kube-VIP HA (First Master only)
+# -----------------------------------------------------------------
+- name: Deploy Kube-VIP HA components
+  include_tasks: kube-vip.yml
+  when: 
+    - inventory_hostname == groups['server'][0]
+    - k3s_ha | bool
+    - k3s_vip_ip | default('') != ''
+  tags: [k3s, vip, ha]
+
+# -----------------------------------------------------------------
+# Task 7: Traefik Ingress Endpoint (First Master only)
+# Configures Traefik to publish the VIP as the Ingress address,
+# so ArgoCD and other tools see Ingress health as "Healthy".
+# -----------------------------------------------------------------
+- name: Deploy Traefik HelmChartConfig
+  template:
+    src: traefik-config.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/traefik-config.yaml
+    mode: "0644"
+  when:
+    - inventory_hostname == groups['server'][0]
+    - k3s_vip_ip | default('') != ''
+  tags: [k3s, traefik, config]

@@ -1,0 +1,105 @@
+---
+
+- name: Add Prometheus Community Helm repository
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: "https://prometheus-community.github.io/helm-charts"
+
+- name: Add Grafana Helm repository
+  kubernetes.core.helm_repository:
+    name: grafana
+    repo_url: "https://grafana.github.io/helm-charts"
+
+- name: Template kube-prometheus-stack values
+  template:
+    src: prometheus-values.yaml.j2
+    dest: /tmp/prometheus-values.yaml
+
+- name: Deploy kube-prometheus-stack (Prometheus, AlertManager, Grafana)
+  kubernetes.core.helm:
+    name: kube-prometheus-stack
+    chart_ref: prometheus-community/kube-prometheus-stack
+    release_namespace: "{{ observability_namespace }}"
+    create_namespace: true
+    chart_version: "{{ prometheus_chart_version }}"
+    values_files:
+      - /tmp/prometheus-values.yaml
+
+- name: Clean up temporary prometheus values
+  file:
+    path: /tmp/prometheus-values.yaml
+    state: absent
+
+- name: Deploy Loki-Stack (Loki + Promtail)
+  kubernetes.core.helm:
+    name: loki
+    chart_ref: grafana/loki-stack
+    release_namespace: "{{ observability_namespace }}"
+    create_namespace: true
+    chart_version: "{{ loki_chart_version }}"
+    values:
+      loki:
+        persistence:
+          enabled: true
+          storageClassName: longhorn
+          size: "{{ loki_storage_size }}"
+        config:
+          table_manager:
+            retention_deletes_enabled: true
+            retention_period: "{{ loki_retention }}"
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "1Gi"
+        securityContext:
+          fsGroup: 10001
+          runAsUser: 10001
+          runAsGroup: 10001
+      promtail:
+        enabled: true
+        resources:
+          requests:
+            memory: "128Mi"
+          limits:
+            memory: "256Mi"
+        config:
+          logLevel: info
+
+- name: Template Tempo values
+  template:
+    src: tempo-values.yaml.j2
+    dest: /tmp/tempo-values.yaml
+
+- name: Deploy Tempo (Distributed Tracing)
+  kubernetes.core.helm:
+    name: tempo
+    chart_ref: grafana/tempo
+    release_namespace: "{{ observability_namespace }}"
+    create_namespace: true
+    chart_version: "{{ tempo_chart_version }}"
+    values_files:
+      - /tmp/tempo-values.yaml
+
+- name: Clean up temporary tempo values
+  file:
+    path: /tmp/tempo-values.yaml
+    state: absent
+
+- name: Import Grafana Homelab Dashboards
+  include_tasks: dashboard.yml
+
+- name: Template MQTT Alert Bridge manifest
+  template:
+    src: alertmanager-bridge.yaml.j2
+    dest: /tmp/alertmanager-bridge.yaml
+
+- name: Deploy MQTT Alert Bridge
+  kubernetes.core.k8s:
+    state: present
+    src: /tmp/alertmanager-bridge.yaml
+
+- name: Clean up temporary bridge manifest
+  file:
+    path: /tmp/alertmanager-bridge.yaml
+    state: absent

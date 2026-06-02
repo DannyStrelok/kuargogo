@@ -1,0 +1,15 @@
+---
+# =================================================================
+# NFS Client Defaults
+# =================================================================
+nfs_enabled: false
+nfs_server: ""
+
+# Default shares to mount when enabled
+nfs_shares:
+  - src: "/volume1/media"
+    dest: "/mnt/nas/media"
+    opts: "rw,soft,intr,timeo=30,nofail,_netdev"
+  - src: "/volume1/backups"
+    dest: "/mnt/nas/backups"
+    opts: "rw,soft,intr,timeo=30,nofail,_netdev"

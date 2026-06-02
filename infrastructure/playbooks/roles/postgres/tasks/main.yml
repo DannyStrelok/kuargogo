@@ -1,0 +1,48 @@
+---
+- name: Deploy CloudNativePG Operator Manifest
+  kubernetes.core.k8s:
+    state: present
+    src: https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/release-1.29/releases/cnpg-1.29.0.yaml
+
+- name: Wait for CNPG Controller Manager to be ready
+  kubernetes.core.k8s_info:
+    api_version: apps/v1
+    kind: Deployment
+    name: cnpg-controller-manager
+    namespace: cnpg-system
+    wait: true
+    wait_timeout: 300
+    wait_condition:
+      type: Available
+      status: "True"
+
+- name: Wait for Longhorn StorageClass to be available
+  kubernetes.core.k8s_info:
+    api_version: storage.k8s.io/v1
+    kind: StorageClass
+    name: longhorn
+  register: longhorn_sc
+  until: longhorn_sc.resources | length > 0
+  retries: 30
+  delay: 10
+
+- name: Create Postgres Cluster Manifest (using Longhorn)
+  copy:
+    dest: /var/lib/rancher/k3s/server/manifests/homelab-db-cluster.yaml
+    mode: '0644'
+    content: |
+      apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      metadata:
+        name: homelab-db
+        namespace: default
+      spec:
+        instances: 3
+        # Primary storage using Longhorn
+        storage:
+          storageClass: longhorn
+          size: 10Gi
+        # Write Ahead Log storage using Longhorn
+        walStorage:
+          storageClass: longhorn
+          size: 2Gi

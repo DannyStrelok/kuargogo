@@ -1,0 +1,6 @@
+---
+- name: Deploy ArgoCD GitOps Engine
+  hosts: server[0]
+  become: true
+  roles:
+    - argocd

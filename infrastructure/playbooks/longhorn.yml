@@ -1,0 +1,7 @@
+---
+# longhorn.yml - Deploy Distributed Block Storage
+- name: Deploy Longhorn Storage System
+  hosts: server[0]
+  become: true
+  roles:
+    - role: longhorn

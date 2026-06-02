@@ -1,0 +1,14 @@
+- name: Deploy Homelab Grafana Dashboard ConfigMap
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: homelab-dashboard
+        namespace: "{{ observability_namespace }}"
+        labels:
+          grafana_dashboard: "1" # Important: kube-prometheus-stack sidecar watches for this label
+      data:
+        homelab.json: "{{ lookup('file', 'homelab-dashboard.json') }}"
+        service-performance.json: "{{ lookup('file', 'service-performance.json') }}"

@@ -1,0 +1,209 @@
+# kuargogo.example.yaml
+# Copy this file to '~/.kuargogo/kuargogo.yaml' or the project root and customize it to match your homelab.
+#
+# IMPORTANT: All fields marked as sensitive (passwords, tokens, S3 secret keys, etc.) can be
+# encrypted in-place by setting a Master Passphrase inside the 'kgg' TUI under '🔐 Security & Vault'.
+# Encrypted values will be saved prefixed with '!vaultENC:' followed by the base64-encoded encrypted data.
+
+version: "v1"
+current_context: "homelab"
+lang: "en" # Supported: "en", "es"
+
+contexts:
+  homelab:
+    # -----------------------------------------------------------------
+    # 🖥️ Node Grid Definition
+    # -----------------------------------------------------------------
+    nodes:
+      - name: "rpi-infra-mgr"
+        ip: "192.168.1.100"
+        user: "pi"
+        role: "infra-manager"     # Always-on control plane bastion (WoL, MQTT, Telegram bot daemon)
+        arch: "arm64"
+        position: "right"
+        mac: "b8:27:eb:11:22:33" # Required for Wake-on-LAN self-healing
+
+      - name: "hp-master"
+        ip: "192.168.1.101"
+        user: "debian"
+        role: "master"            # K3s master node (Control Plane)
+        arch: "amd64"
+        position: "left"
+        mac: "98:90:96:aa:bb:cc"
+
+      - name: "lenovo-worker-1"
+        ip: "192.168.1.102"
+        user: "debian"
+        role: "worker"            # K3s worker node (Compute)
+        arch: "amd64"
+        position: "center"
+        mac: "00:23:24:dd:ee:ff"
+        labels:
+          gpu: "nvidia"           # Activates automated NVIDIA driver & runtime setup during kgg prep
+
+    # -----------------------------------------------------------------
+    # 🔑 SSH Configuration
+    # -----------------------------------------------------------------
+    ssh:
+      private_key_path: "~/.ssh/kgg_cluster_id" # Path to SSH private key. Generated via 'kgg ssh-keygen'
+      port: 22
+
+    # -----------------------------------------------------------------
+    # 🔌 Smart Switch Telemetry
+    # -----------------------------------------------------------------
+    network:
+      switch_ip: "192.168.1.2"
+      user: "admin"
+      pass: "admin"               # Plain-text or !vaultENC:...
+      api_port: 80
+      driver: "tplink"            # Supported drivers: "tplink", "mikrotik", "simulated"
+
+    # -----------------------------------------------------------------
+    # 🌐 Declared VLAN Layout
+    # -----------------------------------------------------------------
+    netwokgg_layout:              # Note: Schema tag matching internal mapstructure
+      vlans:
+        vlan_default:
+          - "port_1"
+          - "port_2"
+          - "port_3"
+          - "port_4"
+          - "port_5"
+          - "port_6"
+          - "port_7"
+          - "port_8"
+      igmp_snooping: true
+
+    # -----------------------------------------------------------------
+    # 📡 MQTT Telemetry Bus
+    # -----------------------------------------------------------------
+    mqtt:
+      broker: "tcp://192.168.1.100:1883"
+      client_id: "kuargogo-admin"
+      username: ""
+      password: ""
+      topic_prefix: "kgg/homelab"
+
+    # -----------------------------------------------------------------
+    # 🦄 K3s Cluster Settings
+    # -----------------------------------------------------------------
+    k3s:
+      token: "replace-with-your-secret-token" # Plain-text or !vaultENC:...
+      kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+      vip: "192.168.1.99"         # Shared Virtual IP for HA deployments (keepalived)
+      vip_interface: "eth0"
+      ha: true
+      version: "v1.29.2+k3s1"     # Target K3s version to install
+      server_args:                # Custom CLI flags passed to k3s server
+        - "--disable=servicelb"
+        - "--disable=traefik"
+      agent_args: []              # Custom CLI flags passed to k3s agent
+
+    # -----------------------------------------------------------------
+    # 🤖 "The Voice" Telegram Daemon
+    # -----------------------------------------------------------------
+    telegram:
+      bot_token: "123456789:AABBCC-YourBotTokenFromBotFather"
+      admin_id: 123456789         # Your Telegram chat ID (restricts bot commands access)
+      timezone: "Europe/Madrid"
+      daily_summary_time: "08:30"
+
+    # -----------------------------------------------------------------
+    # 🔎 ZeroConf Discovery
+    # -----------------------------------------------------------------
+    discovery:
+      enabled: true
+      interface: "eth0"
+
+    # -----------------------------------------------------------------
+    # 🛡️ General Features Switch
+    # -----------------------------------------------------------------
+    maintenance_mode: false       # Set to true to suppress all Telegram notifications
+    hardware_enabled: false       # Set to true to activate physical sensor monitoring via MQTT
+
+    # -----------------------------------------------------------------
+    # 🧠 Local AI Engine
+    # -----------------------------------------------------------------
+    ai:
+      provider: "ollama"          # Supported: "ollama", "openai-compatible", "gemini", "anthropic"
+      model: "llama3"
+      endpoint: "http://192.168.1.102:11434" # Optional for local Ollama endpoints
+      api_key: ""                 # Required for Anthropic/Gemini/OpenAI
+      anonymize_logs: true        # Strips emails, IPs and passwords before feeding logs to AI
+
+    # -----------------------------------------------------------------
+    # 💾 NFS Network Storage Mounts
+    # -----------------------------------------------------------------
+    nfs:
+      enabled: false
+      server: "192.168.1.5"
+      shares:
+        - src: "/volume1/data"
+          dest: "/mnt/data"
+          opts: "rw,sync,no_subtree_check"
+
+    # -----------------------------------------------------------------
+    # ☁️ Cloudflare Zero Trust Tunnels
+    # -----------------------------------------------------------------
+    cloudflare:
+      email: "user@example.com"
+      api_token: ""               # Plain-text or !vaultENC:...
+      account_id: ""              # Resolved dynamically if left empty
+      tunnel_token: ""            # Plain-text or !vaultENC:...
+      tunnel_id: ""               # Resolved dynamically if left empty
+      access_emails:
+        - "trusted-friend@example.com"
+      domains:
+        - domain: "example.com"
+          access_enabled: true
+          services:
+            - name: "argocd"
+              subdomain: "argo"
+              target: "http://argocd-server.argocd.svc.cluster.local:80"
+              protected: true     # Protects the route via Cloudflare Zero Trust Access
+            - name: "grafana"
+              subdomain: "grafana"
+              target: "http://grafana.monitoring.svc.cluster.local:80"
+              protected: true
+
+    # -----------------------------------------------------------------
+    # 🔄 GitOps & Continuous Delivery (ArgoCD & Kargo)
+    # -----------------------------------------------------------------
+    gitops:
+      credentials:
+        - url: "https://github.com/DannyStrelok/kuargogo-apps.git"
+          username: "oauth2"
+          password: "ghp_yourPersonalAccessTokenGoesHere" # Plain-text or !vaultENC:...
+          registry: "ghcr.io"     # Automatically configures pull secrets in all active namespaces
+      projects:
+        - name: "core-infrastructure"
+          description: "Core cluster applications"
+          apps:
+            - name: "cert-manager"
+              repo: "https://github.com/DannyStrelok/kuargogo-apps.git"
+              path: "apps/cert-manager"
+              namespace: "cert-manager"
+            - name: "argocd"
+              repo: "https://github.com/DannyStrelok/kuargogo-apps.git"
+              path: "apps/argocd"
+              namespace: "argocd"
+
+    # -----------------------------------------------------------------
+    # 🖥️ Ansible Environment Controls
+    # -----------------------------------------------------------------
+    ansible:
+      wsl_distro: "Ubuntu"        # Windows Only: WSL Ubuntu instance where playbooks run
+      vault_password_file: "~/.ssh/kgg_cluster_id" # Local decryption key path
+
+# ---------------------------------------------------------------------
+# ☁️ Cloud Sync Backup Settings
+# ---------------------------------------------------------------------
+sync:
+  provider: "s3"                  # s3, r2, etc.
+  salt: "base64EncodedSaltValueGoesHere=="
+  s3:
+    s3_url: "https://your-s3-endpoint.com"
+    s3_bucket: "kuargogo-backups"
+    s3_region: "us-east-1"
+    s3_access_key: "your-access-key"
+    s3_secret_key: "your-secret-key"

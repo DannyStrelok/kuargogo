@@ -1,0 +1,9 @@
+# Excluir binarios compilados y dependencias
+infrastructure/bin/
+bin/
+build/
+.git/
+.example/
+kgg.exe
+kgg-cli.exe
+kgg-cli.exe~

@@ -1,0 +1,21 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Warehouse
+metadata:
+  name: {{.Name}}
+  namespace: {{.Namespace}}
+spec:
+  subscriptions:
+  {{- range .AllImages }}
+  - image:
+      repoURL: {{ . | yamlQuote }}
+      {{- if $.ImageSelectionStrategy }}
+      imageSelectionStrategy: {{$.ImageSelectionStrategy | yamlQuote}}
+      {{- end }}
+      {{- if $.AllowTags }}
+      allowTags: {{$.AllowTags | yamlQuote}}
+      {{- else if $.Semver }}
+      semverConstraint: {{$.Semver | yamlQuote}}
+      {{- else if not $.ImageSelectionStrategy }}
+      semverConstraint: "*"
+      {{- end }}
+  {{- end }}

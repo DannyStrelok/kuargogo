@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    name: Release Binaries
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.goreleaser.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache: true
+
+      - name: Run GoReleaser
+        id: goreleaser
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows Binary Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: kgg-windows-binary
+          path: dist/kuargogo_windows_amd64_v1/kgg.exe
+          if-no-files-found: error
+
+  windows-installer:
+    name: Build Windows Installer
+    needs: goreleaser
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download Windows Binary
+        uses: actions/download-artifact@v8
+        with:
+          name: kgg-windows-binary
+          path: dist
+
+      - name: Verify Binary Exists
+        run: |
+          if (-not (Test-Path "dist\kgg.exe")) {
+            # Try to find kgg.exe in subdirectories
+            $binary = Get-ChildItem -Path dist -Recurse -Filter "kgg.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -eq $binary) {
+              Write-Error "kgg.exe not found in dist folder"
+              Get-ChildItem -Path dist -Recurse | ForEach-Object { Write-Host $_.FullName }
+              exit 1
+            }
+            Copy-Item $binary.FullName -Destination "dist\kgg.exe" -Force
+            Write-Host "Binary found and copied to dist\kgg.exe"
+          } else {
+            Write-Host "Binary already at dist\kgg.exe"
+          }
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress
+
+      - name: Build Installer
+        run: |
+          $Version = "${{ github.ref_name }}".TrimStart("v")
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$Version" "build\windows\setup.iss"
+
+      - name: Rename Installer
+        run: |
+          Move-Item "build\windows\Output\kgg-setup.exe" "build\windows\Output\kgg-setup-${{ github.ref_name }}.exe"
+
+      - name: Debug - List Output Directory
+        run: |
+          Write-Host "Contents of build\windows\Output:"
+          Get-ChildItem -Path "build\windows\Output" -Recurse | ForEach-Object { Write-Host $_.FullName }
+
+      - name: Upload Installer to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/windows/Output/kgg-setup-${{ github.ref_name }}.exe
+          tag_name: ${{ github.ref_name }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

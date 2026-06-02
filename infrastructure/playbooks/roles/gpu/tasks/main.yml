@@ -1,0 +1,138 @@
+---
+# =================================================================
+# Step 1: Install kernel headers
+# =================================================================
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  tags: [drivers]
+
+- name: Install linux headers for current kernel
+  apt:
+    name: "linux-headers-{{ ansible_kernel }}"
+    state: present
+  tags: [drivers]
+
+# =================================================================
+# Step 2: Install NVIDIA CUDA repository keyring
+# =================================================================
+- name: Download CUDA keyring
+  get_url:
+    url: https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-keyring_1.1-1_all.deb
+    dest: /tmp/cuda-keyring.deb
+    mode: "0644"
+  tags: [drivers]
+
+- name: Install CUDA keyring
+  apt:
+    deb: /tmp/cuda-keyring.deb
+  tags: [drivers]
+
+- name: Remove temp keyring file
+  file:
+    path: /tmp/cuda-keyring.deb
+    state: absent
+  tags: [drivers]
+
+# =================================================================
+# Step 3: Install NVIDIA Drivers & Tools
+# =================================================================
+- name: Update apt cache after keyring install
+  apt:
+    update_cache: true
+  tags: [drivers]
+
+- name: Install NVIDIA drivers and SMI
+  apt:
+    name:
+      - nvidia-driver
+      - nvidia-smi
+    state: present
+  tags: [drivers]
+
+# =================================================================
+# Step 4: Install NVIDIA Container Toolkit
+# =================================================================
+- name: Download NVIDIA Container Toolkit GPG key
+  get_url:
+    url: "https://nvidia.github.io/libnvidia-container/gpgkey"
+    dest: "/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
+    mode: "0644"
+  tags: [toolkit]
+
+- name: Configure NVIDIA Container Toolkit repository
+  copy:
+    dest: /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    content: |
+      deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://nvidia.github.io/libnvidia-container/stable/deb/{{ ansible_architecture | replace('x86_64', 'amd64') }} /
+  notify: Update Apt
+  tags: [toolkit]
+
+- name: Install NVIDIA Container Toolkit
+  apt:
+    name: nvidia-container-toolkit
+    state: present
+    update_cache: true
+  tags: [toolkit]
+
+# =================================================================
+# Step 5: Configure Containerd Runtime
+# =================================================================
+- name: Configure containerd for NVIDIA runtime
+  command: nvidia-ctk runtime configure --runtime=containerd
+  register: ctk_config
+  changed_when: true
+  tags: [runtime]
+
+- name: Restart containerd
+  service:
+    name: containerd
+    state: restarted
+  when: ctk_config.changed
+  tags: [runtime]
+
+# =================================================================
+# Step 6: GPU Power Limiting Configuration
+# =================================================================
+- name: Create systemd service for NVIDIA power limit
+  copy:
+    dest: /etc/systemd/system/nvidia-power-limit.service
+    content: |
+      [Unit]
+      Description=NVIDIA GPU Power Limit (50W)
+      After=multi-user.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/nvidia-smi -pl 50
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify: Reload Systemd
+  tags: [power]
+
+- name: Enable and start NVIDIA power limit service
+  systemd:
+    name: nvidia-power-limit.service
+    enabled: true
+    state: started
+  tags: [power]
+
+# =================================================================
+# Step 7: Verification
+# =================================================================
+- name: Verify nvidia-smi
+  command: nvidia-smi
+  register: nvidia_smi
+  failed_when: false
+  changed_when: false
+  tags: [verify]
+
+- name: Warn if reboot required
+  debug:
+    msg: "⚠️  nvidia-smi failed. A reboot is likely required to load the new kernel modules."
+  when: nvidia_smi.rc != 0
+  tags: [verify]

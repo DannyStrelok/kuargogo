@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: {{.Name}}-apps
+  namespace: {{.Namespace}}
+spec:
+  generators:
+  - list:
+      elements:
+      - env: dev
+      - env: test
+      - env: prod
+  template:
+    metadata:
+      name: '{{.Name}}-{{printf "{{env}}"}}'
+    spec:
+      project: {{.Name}}
+      source:
+        repoURL: {{.Repo | yamlQuote}}
+        targetRevision: main
+        path: environments/{{printf "{{env}}"}}
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{.Name}}-{{printf "{{env}}"}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+        - CreateNamespace=true

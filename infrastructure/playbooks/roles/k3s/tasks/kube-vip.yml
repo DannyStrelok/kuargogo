@@ -1,0 +1,34 @@
+---
+- name: Add Kube-VIP Helm repository
+  kubernetes.core.helm_repository:
+    name: kube-vip
+    repo_url: "https://kube-vip.github.io/helm-charts"
+
+- name: Deploy Kube-VIP via Helm
+  kubernetes.core.helm:
+    name: kube-vip
+    chart_ref: kube-vip/kube-vip
+    release_namespace: kube-system
+    values:
+      image:
+        tag: "{{ k3s_vip_version }}"
+      config:
+        address: "{{ k3s_vip_ip }}"
+      env:
+        vip_interface: "{{ k3s_vip_interface | default(ansible_default_ipv4.interface, true) }}"
+        vip_arp: "true"
+        vip_leaderelection: "true"
+        cp_enable: "true"
+        cp_namespace: kube-system
+        svc_enable: "true"
+        vip_cidr: "32"
+        vip_hostname: "true"
+      nodeSelector:
+        node-role.kubernetes.io/master: "true"
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists

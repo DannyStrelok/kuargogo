@@ -1,0 +1,59 @@
+---
+# =================================================================
+# Reset (uninstall) K3s from node - Scorched Earth Edition
+# =================================================================
+- name: Stop K3s services
+  systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: no
+  loop: [k3s, k3s-agent]
+  failed_when: false
+  tags: [reset]
+
+- name: Run Official K3s uninstall scripts
+  shell: "{{ item }}"
+  loop:
+    - /usr/local/bin/k3s-uninstall.sh
+    - /usr/local/bin/k3s-agent-uninstall.sh
+  failed_when: false
+  tags: [reset]
+
+- name: Forcefully kill residual K3s/Containerd processes
+  shell: |
+    killall k3s 2>/dev/null || true
+    killall k3s-server 2>/dev/null || true
+    killall containerd 2>/dev/null || true
+    ps aux | grep -e k3s -e containerd | grep -v grep | awk '{print $2}' | xargs -r kill -9
+  failed_when: false
+  tags: [reset]
+
+- name: Unmount all K3s/Kubelet filesystems
+  shell: |
+    for m in $(mount | grep -e "rancher/k3s" -e "kubelet" | awk '{print $3}'); do
+      umount -f -l $m 2>/dev/null || true
+    done
+  failed_when: false
+  tags: [reset]
+
+- name: Scorched Earth - Remove all data and config directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/rancher/k3s
+    - /etc/rancher/k3s
+    - /run/k3s
+    - /var/lib/kubelet
+    - /var/lib/etcd
+    - /var/log/pods
+    - /var/log/containers
+    - /var/lib/cni
+    - /etc/cni
+    - /var/lib/longhorn
+  tags: [reset]
+
+- name: Confirm reset complete
+  debug:
+    msg: "🔥 K3s has been completely purged from {{ inventory_hostname }}. (Scorched Earth Mode)"
+  tags: [reset]

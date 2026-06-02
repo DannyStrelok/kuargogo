@@ -1,0 +1,13 @@
+#!/bin/bash
+# Send an alert to the kgg-agent when someone logs in via SSH
+if [ -n "$SSH_CLIENT" ]; then
+    IP=$(echo $SSH_CLIENT | awk '{print $1}')
+    {% if groups['infra'] is defined and groups['infra'] | length > 0 %}
+    AGENT_IP="{{ hostvars[groups['infra'][0]]['ansible_host'] | default('127.0.0.1') }}"
+    {% else %}
+    AGENT_IP="127.0.0.1" # Fallback if no infra group defined
+    {% endif %}
+    
+    # Send a lightweight UDP JSON payload to the agent
+    python3 -c "import socket, json; socket.socket(socket.AF_INET, socket.SOCK_DGRAM).sendto(json.dumps({'event':'ssh_login', 'node':'$(hostname)', 'user':'$(whoami)', 'ip':'$IP'}).encode(), ('$AGENT_IP', 5555))" > /dev/null 2>&1 &
+fi

@@ -1,0 +1,13 @@
+---
+# apps-backup.yml - Trigger System Backup
+- name: Trigger System Backup
+  hosts: all
+  become: true
+  tasks:
+    - name: Simulate backup procedure
+      command: "echo 'Backing up critical data...' && sleep 2 && echo 'Backup complete.'"
+      register: backup_result
+
+    - name: Show Backup Result
+      debug:
+        msg: "{{ backup_result.stdout }}"

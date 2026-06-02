@@ -1,0 +1,12 @@
+---
+- name: Ensure K3s manifests directory exists
+  file:
+    path: /var/lib/rancher/k3s/server/manifests
+    state: directory
+    mode: '0755'
+
+- name: Deploy Registry Cache manifests
+  template:
+    src: registry-cache.yaml.j2
+    dest: /var/lib/rancher/k3s/server/manifests/registry-cache.yaml
+    mode: '0644'

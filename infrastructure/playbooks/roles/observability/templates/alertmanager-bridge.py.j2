@@ -1,0 +1,59 @@
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
+import paho.mqtt.client as mqtt
+import os
+import sys
+
+# Configuration from ENV
+MQTT_HOST = os.environ.get("MQTT_HOST", "")
+MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
+MQTT_TOPIC = os.environ.get("MQTT_TOPIC", "rack/alerts")
+GRAFANA_URL = os.environ.get("GRAFANA_URL", "https://grafana.{{ cloudflare_domain }}")
+
+print(f"Starting Alertmanager-MQTT Bridge. Target: {MQTT_HOST}:{MQTT_PORT} topic: {MQTT_TOPIC}")
+
+def send_to_mqtt(message):
+    try:
+        client = mqtt.Client()
+        client.connect(MQTT_HOST, MQTT_PORT, 60)
+        client.publish(MQTT_TOPIC, message)
+        client.disconnect()
+        print(f"Sent to MQTT: {message}")
+    except Exception as e:
+        print(f"Failed to send to MQTT: {e}", file=sys.stderr)
+
+class WebhookHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        
+        try:
+            data = json.loads(post_data)
+            for alert in data.get('alerts', []):
+                status = alert.get('status', 'resolved').upper()
+                labels = alert.get('labels', {})
+                name = labels.get('alertname', 'Unknown Alert')
+                node = labels.get('node', labels.get('instance', 'Cluster'))
+                summary = alert.get('annotations', {}).get('summary', 'No summary provided')
+                
+                icon = "🚨" if status == "FIRING" else "✅"
+                severity = labels.get('severity', 'info').upper()
+                
+                # Format: [FIRING:CRITICAL] Node Disk Full on lenovo-1 - Summary text. Check: URL
+                msg = f"[{icon} {status}:{severity}] {name} on {node} - {summary}"
+                if status == "FIRING":
+                    msg += f"\n📊 View: {GRAFANA_URL}"
+                
+                send_to_mqtt(msg)
+            
+            self.send_response(200)
+            self.end_headers()
+        except Exception as e:
+            print(f"Error processing webhook: {e}", file=sys.stderr)
+            self.send_response(500)
+            self.end_headers()
+
+if __name__ == "__main__":
+    server_address = ('', 8080)
+    httpd = HTTPServer(server_address, WebhookHandler)
+    httpd.serve_forever()

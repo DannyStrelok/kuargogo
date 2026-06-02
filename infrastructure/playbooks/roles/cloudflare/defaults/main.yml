@@ -1,0 +1,5 @@
+---
+cloudflare_namespace: "cloudflare-tunnel"
+cloudflare_tunnel_token: ""
+cloudflared_image_version: "2024.12.2"
+cloudflared_replicas: 2

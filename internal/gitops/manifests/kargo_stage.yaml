@@ -1,0 +1,56 @@
+apiVersion: kargo.akuity.io/v1alpha1
+kind: Stage
+metadata:
+  name: {{.Name}}
+  namespace: {{.Project}}
+spec:
+  requestedFreight:
+  - origin:
+      kind: Warehouse
+      name: {{.Warehouse}}
+    sources:
+      {{- if .Upstream}}
+      direct: false
+      stages:
+      {{- range .Upstream}}
+      - {{.}}
+      {{- end}}
+      {{- else}}
+      direct: true
+      {{- end}}
+  promotionTemplate:
+    spec:
+      steps:
+      - uses: git-clone
+        config:
+          repoURL: {{.RepoURL | yamlQuote}}
+          checkout:
+          - branch: main
+            path: ./src
+      - uses: kustomize-set-image
+        as: update-image
+        config:
+          path: ./src/{{.RepoPath}}
+          images:
+          {{- range .AllImages }}
+          - image: {{ . | yamlQuote }}
+            tag: {{ printf "${{ imageFrom(%s).Tag }}" (. | yamlQuote) }}
+          {{- end }}
+      - uses: git-commit
+        config:
+          path: ./src
+          message: |
+            {{ printf "🚀 [GitOps] Promote to Stage: ${{ ctx.stage }}" }}
+
+            {{ printf "${{ outputs['update-image'].commitMessage }}" }}
+
+            {{ printf "📋 Promotion Metadata:" }}
+            {{ printf "- Project:      ${{ ctx.project }}" }}
+            {{ printf "- Stage:        ${{ ctx.stage }}" }}
+            {{ printf "- Triggered By: ${{ ctx.meta.promotion.actor }}" }}
+            {{ printf "- Freight:      ${{ ctx.targetFreight.name }}" }}
+            {{ printf "- Warehouse:    ${{ ctx.targetFreight.origin.name }}" }}
+            {{ printf "- Promotion ID: ${{ ctx.promotion }}" }}
+      - uses: git-push
+        config:
+          path: ./src

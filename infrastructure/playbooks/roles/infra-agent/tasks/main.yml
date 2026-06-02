@@ -1,0 +1,269 @@
+---
+# =================================================================
+# TASK 1: Install Dependencies
+# =================================================================
+- name: Install system dependencies for Agent
+  apt:
+    name:
+      - mosquitto
+      - mosquitto-clients
+      - python3-paho-mqtt
+      - python3-pip
+      - python3-venv
+      - python3-pytz
+      - etherwake
+      - systemd
+      - ufw
+      - netcat-openbsd
+      - ansible-core
+    state: present
+    update_cache: true
+
+- name: Ensure kgg_agent_user has passwordless sudo
+  copy:
+    dest: "/etc/sudoers.d/kgg-agent-sudo"
+    content: "{{ kgg_agent_user }} ALL=(ALL) NOPASSWD:ALL"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Install Python dependencies via pip in venv
+  pip:
+    name:
+      - aiogram
+      - pytz
+      - paho-mqtt
+    virtualenv: "{{ kgg_agent_home }}/kgg-env"
+    virtualenv_command: python3 -m venv
+  tags: [bot]
+
+- name: Copy Bot Logo
+  copy:
+    src: rack_logo.png
+    dest: "{{ kgg_agent_home }}/rack_logo.png"
+    mode: "0644"
+  ignore_errors: true
+  tags: [bot]
+
+# =================================================================
+# TASK 2: Deploy Scripts
+# =================================================================
+- name: Remove legacy telegram_bot.py (Migration to Voice service)
+  file:
+    path: "{{ kgg_agent_home }}/telegram_bot.py"
+    state: absent
+  tags: [bot]
+
+- name: Remove legacy kgg_telegram.py (Migrated to package in v0.3.0)
+  file:
+    path: "{{ kgg_agent_home }}/kgg_telegram.py"
+    state: absent
+  tags: [bot]
+
+- name: Deploy kgg_common.py (Shared utilities)
+  copy:
+    src: kgg_common.py
+    dest: "{{ kgg_agent_home }}/kgg_common.py"
+    owner: "{{ kgg_agent_user }}"
+    mode: "0644"
+  notify:
+    - Restart kgg-agent
+    - Restart kgg-telegram
+  tags: [bot]
+
+- name: Deploy kgg_telegram package (The Voice)
+  copy:
+    src: kgg_telegram/
+    dest: "{{ kgg_agent_home }}/kgg_telegram/"
+    owner: "{{ kgg_agent_user }}"
+    mode: "0644"
+    directory_mode: "0755"
+  notify: Restart kgg-telegram
+  tags: [bot]
+
+# =================================================================
+# TASK 2b: Deploy autonomous Kuargogo
+# The binary is pre-compiled by RunInfraInit() in Go before this
+# playbook is invoked, and placed in infrastructure/bin/kgg-<arch>.
+# =================================================================
+- name: Determine Target Architecture
+  set_fact:
+    go_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else ('amd64' if ansible_architecture == 'x86_64' else 'arm') }}"
+  tags: [rkcli]
+
+- name: Deploy pre-compiled Kuargogo binary to Infrastructure Manager
+  copy:
+    src: "{{ playbook_dir }}/../../infrastructure/bin/kgg-{{ go_arch }}"
+    dest: "/usr/local/bin/kgg"
+    mode: "0755"
+    owner: root
+  tags: [rkcli]
+
+- name: Ensure .kuargogo directory exists
+  file:
+    path: "/home/{{ kgg_agent_user }}/.kuargogo"
+    state: directory
+    mode: "0700"
+    owner: "{{ kgg_agent_user }}"
+  tags: [rkcli]
+
+- name: Extract base config to user config directory
+  copy:
+    content: "{{ kgg_config_content | default(omit) }}"
+    src: "{{ omit if kgg_config_content is defined else kgg_config_file }}"
+    dest: "/home/{{ kgg_agent_user }}/.kuargogo/kuargogo.yaml"
+    mode: "0600"
+    owner: "{{ kgg_agent_user }}"
+  tags: [rkcli]
+
+- name: Persist KGG_MASTER_PASSPHRASE in shell environment
+  lineinfile:
+    path: "/home/{{ kgg_agent_user }}/.bashrc"
+    regexp: "^export KGG_MASTER_PASSPHRASE="
+    line: "export KGG_MASTER_PASSPHRASE={{ kgg_master_passphrase }}"
+    state: present
+    create: true
+  when: kgg_master_passphrase is defined and kgg_master_passphrase != ""
+  tags: [bot, rkcli]
+
+- name: Persist KGG_CLUSTER_KEY_PATH in shell environment
+  lineinfile:
+    path: "/home/{{ kgg_agent_user }}/.bashrc"
+    regexp: "^export KGG_CLUSTER_KEY_PATH="
+    line: "export KGG_CLUSTER_KEY_PATH={{ kgg_cluster_private_key_path }}"
+    state: present
+    create: true
+  tags: [bot, rkcli]
+
+- name: Create symlink for kuargogo command
+  file:
+    src: "/usr/local/bin/kgg"
+    dest: "/usr/local/bin/kuargogo"
+    state: link
+  tags: [rkcli]
+
+- name: Deploy kgg_agent.py script
+  copy:
+    src: kgg_agent.py
+    dest: "{{ kgg_agent_home }}/kgg_agent.py"
+    owner: "{{ kgg_agent_user }}"
+    mode: "0755"
+  notify: Restart kgg-agent
+  tags: [bot]
+
+- name: Ensure .ssh directory exists
+  file:
+    path: "{{ kgg_agent_home }}/.ssh"
+    state: directory
+    mode: "0700"
+    owner: "{{ kgg_agent_user }}"
+
+- name: Copy cluster SSH private key for K3s checking
+  copy:
+    src: "{{ kgg_cluster_private_key_src | default(ansible_ssh_private_key_file) }}"
+    dest: "{{ kgg_cluster_private_key_path }}"
+    mode: "0600"
+    owner: "{{ kgg_agent_user }}"
+  when: kgg_cluster_private_key_src is defined or ansible_ssh_private_key_file is defined
+
+# =================================================================
+# TASK 3: Firewall Rules (Infrastructure Services)
+# =================================================================
+- name: Allow UDP 5555 for Agent Alerts
+  ufw:
+    rule: allow
+    port: 5555
+    proto: udp
+    comment: "SSH Alert Relay"
+  tags: [firewall, infra]
+
+- name: Allow Inbound MQTT for Internal Comms
+  ufw:
+    rule: allow
+    port: 1883
+    proto: tcp
+    comment: "MQTT Event Bridge"
+  tags: [firewall, infra]
+
+# =================================================================
+# TASK 4: Setup Systemd Service
+# =================================================================
+- name: Remove legacy Mosquitto config
+  file:
+    path: /etc/mosquitto/conf.d/rk.conf
+    state: absent
+  notify: Restart Mosquitto (Broker)
+  tags: [firewall, infra]
+
+- name: Deploy Mosquitto custom config
+  template:
+    src: mosquitto_kgg.conf.j2
+    dest: /etc/mosquitto/conf.d/kgg.conf
+    mode: "0644"
+  notify: Restart Mosquitto (Broker)
+  tags: [firewall, infra]
+
+- name: Create kgg-agent service file
+  template:
+    src: kgg-agent.service.j2
+    dest: /etc/systemd/system/kgg-agent.service
+    mode: "0644"
+  notify: Restart kgg-agent
+- name: Create kgg-telegram service file
+  template:
+    src: kgg-telegram.service.j2
+    dest: /etc/systemd/system/kgg-telegram.service
+    mode: "0644"
+  notify: Restart kgg-telegram
+  tags: [bot]
+
+- name: Enable and start dependencies and kgg-agent
+  systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - mosquitto
+    - kgg-agent
+    - kgg-telegram
+  tags: [bot]
+
+- name: Remove legacy PAM SSH alert config
+  lineinfile:
+    path: /etc/pam.d/sshd
+    line: "session optional pam_exec.so /usr/local/bin/kgg-ssh-alert"
+    state: absent
+
+# =================================================================
+# TASK 5: Hardware Watchdog (Pi only)
+# =================================================================
+- name: Enable Broadcom Watchdog on Pi
+  lineinfile:
+    path: /boot/firmware/config.txt
+    line: "dtparam=watchdog=on"
+  register: watchdog_hw_config_result
+  when: ansible_architecture is search('arm') or ansible_architecture == 'aarch64'
+  tags: [hardware, watchdog]
+
+- name: Enable systemd internal watchdog (safer than daemon)
+  lineinfile:
+    path: /etc/systemd/system.conf
+    regexp: "^#?RuntimeWatchdogSec="
+    line: "RuntimeWatchdogSec=10s"
+  register: watchdog_systemd_config_result
+  when: ansible_architecture is search('arm') or ansible_architecture == 'aarch64'
+  tags: [hardware, watchdog]
+
+- name: Mark reboot required if watchdog hardware config changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  when: watchdog_hw_config_result.changed or watchdog_systemd_config_result.changed
+  tags: [hardware, watchdog]
+
+- name: Ensure legacy watchdog daemon is removed
+  apt:
+    name: watchdog
+    state: absent
+    purge: true
+  tags: [hardware]

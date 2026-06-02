@@ -1,0 +1,31 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+rack.db-journal
+
+# Dev/Test
+kuargogo.yaml
+.example/
+infrastructure/bin/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+_tasks/*
+_tasks
+./bin/*

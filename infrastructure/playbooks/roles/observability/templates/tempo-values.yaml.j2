@@ -1,0 +1,48 @@
+# Helm Chart Top-Level Keys
+service:
+  port: 3200
+
+persistence:
+  enabled: true
+  storageClassName: longhorn
+  size: {{ tempo_storage_size }}
+  accessModes:
+    - ReadWriteOnce
+
+# Root-level securityContext
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  runAsNonRoot: true
+ 
+resources:
+  requests:
+    cpu: 100m
+    memory: "256Mi"
+  limits:
+    cpu: 500m
+    memory: "512Mi"
+
+# Los receptores OTLP deben ir dentro del bloque 'traces'
+traces:
+  otlp:
+    grpc:
+      enabled: true
+    http:
+      enabled: true
+
+# Configuración específica de Tempo
+tempo:
+  retention: {{ tempo_retention }}
+  
+  # El Chart usa camelCase para habilitar el componente
+  metricsGenerator:
+    enabled: true
+    # La configuración interna del binario se mapea dentro de 'config'
+    config:
+      storage:
+        remote_write:
+          - url: "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+          # Opcional pero muy recomendado para correlación de métricas y trazas:
+            send_exemplars: true

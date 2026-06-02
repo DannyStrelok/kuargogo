@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Configuration
+BRAIN_IP="{{ kgg_manager_ip | default(hostvars[groups['infra'][0]]['ansible_host']) | default('127.0.0.1') }}"
+UDP_PORT=5555
+NODE_NAME="{{ inventory_hostname }}"
+
+# PAM variables
+USER_NAME="$PAM_USER"
+REMOTE_IP="$PAM_RHOST"
+TYPE="$PAM_TYPE"
+
+# Only alert on open (login)
+if [ "$TYPE" = "open_session" ]; then
+    PAYLOAD="{\"event\": \"ssh_login\", \"node\": \"$NODE_NAME\", \"user\": \"$USER_NAME\", \"ip\": \"$REMOTE_IP\"}"
+    echo "$PAYLOAD" | nc -u -w 1 "$BRAIN_IP" "$UDP_PORT"
+fi
+
+exit 0

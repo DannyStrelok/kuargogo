@@ -1,0 +1,48 @@
+{% set active_token = k3s_token | default(hostvars[groups['server'][0]].k3s_slurped_token.content | default('') | b64decode | trim, true) %}
+{% if active_token != '' %}
+token: "{{ active_token }}"
+{% endif %}
+
+{% if inventory_hostname != groups['server'][0] and k3s_server_url is defined %}
+server: "{{ k3s_server_url }}"
+{% endif %}
+
+{% if inventory_hostname == groups['server'][0] and k3s_ha | bool and (groups['server'] | length > 1) %}
+cluster-init: true
+{% endif %}
+
+{% if k3s_tls_sans is defined %}
+tls-san:
+{% for san in k3s_tls_sans.split(',') %}
+  - "{{ san }}"
+{% endfor %}
+{% endif %}
+
+{% if node_labels is defined and node_labels != '' %}
+node-label:
+{% for label in node_labels.split(',') %}
+  - "{{ label }}"
+{% endfor %}
+{% endif %}
+
+disable:
+  - servicelb
+
+etcd-arg:
+  - "heartbeat-interval=500"
+  - "election-timeout=5000"
+etcd-snapshot-schedule-cron: "0 */12 * * *"
+etcd-snapshot-retention: 5
+
+kubelet-arg:
+  - "system-reserved=cpu=200m,memory=500Mi"
+  - "kube-reserved=cpu=200m,memory=500Mi"
+  - "eviction-hard=memory.available<500Mi,nodefs.available<10%"
+
+# Extra Arguments from kuargogo.yaml
+{% set extra_args = k3s_server_extra_args if (k3s_type == 'server') else k3s_agent_extra_args %}
+{% if extra_args is defined and extra_args != '' %}
+{% for arg in extra_args.split(',') %}
+{{ arg }}
+{% endfor %}
+{% endif %}

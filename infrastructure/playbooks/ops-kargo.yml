@@ -1,0 +1,6 @@
+---
+- name: Deploy Kargo Promotion Engine
+  hosts: server[0]
+  become: true
+  roles:
+    - kargo

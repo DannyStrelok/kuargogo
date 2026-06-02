@@ -1,0 +1,7 @@
+---
+# registry-cache.yml - Deploy local Docker Hub pull-through proxy
+- name: Deploy Registry Cache
+  hosts: server[0]
+  become: true
+  roles:
+    - role: registry-cache

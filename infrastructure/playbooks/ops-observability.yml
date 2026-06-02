@@ -1,0 +1,6 @@
+---
+- name: Deploy Observability LGTM Stack
+  hosts: server[0]
+  become: true
+  roles:
+    - observability

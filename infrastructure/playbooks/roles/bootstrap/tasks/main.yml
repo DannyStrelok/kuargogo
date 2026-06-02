@@ -1,0 +1,393 @@
+---
+# =================================================================
+# Bootstrap Role: Initial Node Setup
+# Used to transition from a fresh OS (DHCP) to a static IP config.
+# =================================================================
+
+- name: Install bootstrap dependencies
+  apt:
+    name:
+      - network-manager
+      - avahi-daemon
+      - ethtool
+      - resolvconf
+      - iputils-ping
+    state: present
+    update_cache: true
+  tags: [bootstrap, packages]
+
+- name: Re-check for nmcli after installation
+  command: command -v nmcli
+  register: nmcli_installed
+  failed_when: false
+  changed_when: false
+  tags: [always, bootstrap, discovery]
+
+# =================================================================
+# TASK 0: Discovery & Preparation
+# =================================================================
+- name: Detect Network Management Tools (Paths)
+  block:
+    - name: Check for Netplan binary
+      stat:
+        path: "{{ item }}"
+      register: netplan_bin_check
+      loop:
+        - /usr/sbin/netplan
+        - /usr/bin/netplan
+
+    - name: Check for nmcli binary
+      stat:
+        path: "{{ item }}"
+      register: nmcli_bin_check
+      loop:
+        - /usr/bin/nmcli
+        - /usr/sbin/nmcli
+
+    - name: Check for Netplan directory
+      stat:
+        path: /etc/netplan
+      register: netplan_dir
+
+    - name: Check for legacy interfaces file
+      stat:
+        path: /etc/network/interfaces
+      register: interfaces_file
+
+    - name: Set Discovery Facts
+      set_fact:
+        has_netplan: "{{ (netplan_bin_check.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', True) | list | length > 0) and netplan_dir.stat.exists }}"
+        has_nmcli: "{{ nmcli_bin_check.results | selectattr('stat.exists', 'defined') | selectattr('stat.exists', 'equalto', True) | list | length > 0 }}"
+  tags: [always, bootstrap, discovery]
+
+- name: Format Static IP (Handle CIDR in IP variable)
+  set_fact:
+    final_ip: "{{ static_ip.split('/')[0] }}"
+    final_mask: "{{ static_ip.split('/')[1] | default(static_mask | default(24)) }}"
+    nm_renderer_active: "{{ netplan_dir.stat.exists and (ansible_distribution == 'Ubuntu' or 'netplan' in ansible_fact_path | default('')) }}"
+  when: static_ip is defined
+  tags: [bootstrap, network, debug]
+
+- name: Discovery Results
+  debug:
+    msg:
+      - "Has Netplan: {{ has_netplan }}"
+      - "Has nmcli: {{ has_nmcli }}"
+      - "Netplan Dir Exists: {{ netplan_dir.stat.exists }}"
+      - "Default Interface: {{ ansible_default_ipv4.interface | default('N/A') }}"
+      - "All IPs: {{ ansible_all_ipv4_addresses }}"
+      - "Static IP: {{ final_ip }}/{{ final_mask }}"
+  tags: [bootstrap, debug]
+
+# =================================================================
+# TASK 1: Pre-flight Checks
+# =================================================================
+- name: Check if target static IP is already in use
+  wait_for:
+    host: "{{ static_ip }}"
+    port: 22
+    timeout: 5
+    state: started
+  register: ip_check
+  failed_when: false
+  check_mode: no
+  when: static_ip is defined
+  tags: [bootstrap, network]
+
+- name: Fail if target IP is already responding (Collision Check)
+  fail:
+    msg: "❌ ERROR: The target static IP {{ static_ip }} is already responding on the network by ANOTHER device. Use a different IP or clear the conflict."
+  when:
+    - static_ip is defined
+    - not ip_check.failed
+    - final_ip not in ansible_all_ipv4_addresses
+  tags: [bootstrap, network]
+
+- name: Format Static IP (Handle CIDR in IP variable)
+  set_fact:
+    final_ip: "{{ static_ip.split('/')[0] }}"
+    final_mask: "{{ static_ip.split('/')[1] | default(static_mask | default(24)) }}"
+  when: static_ip is defined
+  tags: [bootstrap, network]
+
+# =================================================================
+# TASK 2: Service & Legacy Migration Prep
+# =================================================================
+- name: Backup legacy network interfaces file
+  copy:
+    src: /etc/network/interfaces
+    dest: /etc/network/interfaces.kgg.bak
+    remote_src: true
+    mode: "0644"
+  when: interfaces_file.stat.exists
+  tags: [bootstrap, network]
+
+- name: Prevent conflicts with legacy interfaces
+  copy:
+    dest: /etc/network/interfaces
+    mode: "0644"
+    content: |
+      # =========================================================
+      # [kuargogo] CONTROLLED NODE
+      # This file is now bypassed. Network configuration is 
+      # managed natively via NetworkManager or Netplan.
+      # Original backup -> /etc/network/interfaces.kgg.bak
+      # =========================================================
+
+      # The loopback network interface
+      auto lo
+      iface lo inet loopback
+  when:
+    - interfaces_file.stat.exists
+    - (has_netplan or has_nmcli)
+  tags: [bootstrap, network]
+
+- name: Disable dhcpcd service for next boot (if present)
+  systemd:
+    name: dhcpcd
+    enabled: no
+  when:
+    - (ansible_architecture is search('arm') or ansible_architecture == 'aarch64')
+    - "'dhcpcd.service' in dhcpcd_check.stdout"
+  tags: [bootstrap, network]
+
+- name: Force Netplan to use NetworkManager renderer
+  copy:
+    dest: /etc/netplan/01-network-manager-all.yaml
+    content: |
+      network:
+        version: 2
+        renderer: NetworkManager
+  when: has_netplan
+  tags: [bootstrap, network]
+
+- name: Ensure NetworkManager is present and enabled
+  systemd:
+    name: NetworkManager
+    enabled: true
+    state: started
+  when: has_nmcli
+  tags: [bootstrap, network]
+
+- name: Force NetworkManager to manage all internal interfaces
+  ini_file:
+    path: /etc/NetworkManager/NetworkManager.conf
+    section: ifupdown
+    option: managed
+    value: "true"
+    no_extra_spaces: true
+  when: has_nmcli
+  register: nm_conf_update
+  tags: [bootstrap, network]
+
+- name: Restart NetworkManager to apply ifupdown policy
+  systemd:
+    name: NetworkManager
+    state: restarted
+  when:
+    - has_nmcli
+    - nm_conf_update is changed
+  tags: [bootstrap, network]
+
+# =================================================================
+# TASK 3: Network Stability Hooks
+# =================================================================
+- name: Suppress cloud-init network management (if exists)
+  block:
+    - name: Check for cloud-init configuration directory
+      stat:
+        path: /etc/cloud/cloud.cfg.d
+      register: cloud_init_dir
+
+    - name: Disable cloud-init network config
+      copy:
+        dest: /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        content: "network: {config: disabled}"
+      when: cloud_init_dir.stat.exists
+  tags: [bootstrap, network]
+
+# =================================================================
+# TASK 4: Service Discovery (Avahi)
+# =================================================================
+- name: Enable Avahi SSH announcement
+  copy:
+    src: /usr/share/doc/avahi-daemon/examples/ssh.service
+    dest: /etc/avahi/services/ssh.service
+    remote_src: true
+  when: avahi_enabled | default(true)
+  notify: Restart Avahi
+  tags: [bootstrap, avahi]
+
+- name: Ensure Avahi is enabled and started
+  systemd:
+    name: avahi-daemon
+    enabled: true
+    state: started
+  when: avahi_enabled | default(true)
+  tags: [bootstrap, avahi]
+
+# =================================================================
+# TASK 5: Hostname Maintenance
+# =================================================================
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  tags: [bootstrap, hostname]
+
+- name: Update /etc/hosts
+  lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1'
+    line: "127.0.1.1 {{ inventory_hostname }}"
+  tags: [bootstrap, hostname]
+
+# =================================================================
+# TASK 6: Static IP Configuration (Netplan - Tier 1)
+# =================================================================
+- name: Configure Static IP via Netplan
+  copy:
+    mode: "0644"
+    force: true
+    dest: /etc/netplan/99-kgg-static.yaml
+    content: |
+      network:
+        version: 2
+        renderer: NetworkManager
+        ethernets:
+          {{ ansible_default_ipv4.interface | default('eth0') }}:
+            dhcp4: no
+            wakeonlan: true
+            addresses:
+              - {{ final_ip }}/{{ final_mask }}
+            routes:
+              - to: default
+                via: {{ gateway | default('192.168.1.1') }}
+            nameservers:
+              addresses: {{ (dns_list | default('1.1.1.1,8.8.8.8')).split(',') }}
+  when: has_netplan
+  register: netplan_config
+  tags: [bootstrap, network]
+
+- name: VERIFY - Check if Netplan file exists
+  stat:
+    path: /etc/netplan/99-kgg-static.yaml
+  when: has_netplan
+  register: verify_netplan
+  tags: [bootstrap, network]
+
+- name: ABORT - Fail if Netplan file was not created
+  fail:
+    msg: "❌ FATAL: Netplan file /etc/netplan/99-kgg-static.yaml was NOT found after 'copy' task!"
+  when:
+    - has_netplan
+    - not verify_netplan.stat.exists
+  tags: [bootstrap, network]
+
+# =================================================================
+# TASK 7: Static IP Configuration (NetworkManager - Tier 2)
+# =================================================================
+- name: Find existing connection for active interface
+  shell: "nmcli -t -f NAME,DEVICE connection show --active | grep '{{ ansible_default_ipv4.interface | default('eth0') }}' | cut -d: -f1"
+  register: current_conn
+  changed_when: false
+  failed_when: false
+  when:
+    - not has_netplan
+    - has_nmcli
+  tags: [bootstrap, network]
+
+- name: Configure Static IP via nmcli
+  shell: |
+    set -e
+    IFACE="{{ ansible_default_ipv4.interface | default('eth0') }}"
+    DESIRED_IP="{{ final_ip }}/{{ final_mask }}"
+    DESIRED_GW="{{ gateway | default('192.168.1.1') }}"
+    DESIRED_DNS="{{ dns_list | default('1.1.1.1,8.8.8.8') }}"
+    CHANGED=0
+
+    # 1. Identify Target Connection (Prefer existing kgg-static or active)
+    TARGET_CONN=$(nmcli -t -f NAME,DEVICE connection show --active | grep ":$IFACE$" | cut -d: -f1 | head -n1 || true)
+
+    if [ -z "$TARGET_CONN" ]; then
+      TARGET_CONN="kgg-static-$IFACE"
+      if ! nmcli -t -f NAME connection show | grep -q "^$TARGET_CONN$"; then
+        nmcli connection add type ethernet ifname "$IFACE" con-name "$TARGET_CONN" >/dev/null
+        CHANGED=1
+      fi
+    fi
+
+    # 2. Prevent connection conflicts (Disable others for THIS interface)
+    OTHER_CONNS=$(nmcli -t -f NAME,DEVICE connection show | grep ":$IFACE$" | cut -d: -f1 | grep -v "^$TARGET_CONN$" || true)
+    if [ -n "$OTHER_CONNS" ]; then
+      while IFS= read -r conn; do
+        [ -z "$conn" ] && continue
+        AUTO=$(nmcli -g connection.autoconnect connection show "$conn" || true)
+        if [ "$AUTO" = "yes" ]; then
+          nmcli connection modify "$conn" connection.autoconnect no
+          CHANGED=1
+        fi
+      done <<< "$OTHER_CONNS"
+    fi
+
+    # 3. Check current configuration of Target
+    CUR_IP=$(nmcli -g ipv4.addresses connection show "$TARGET_CONN" | head -n1 || true)
+    CUR_GW=$(nmcli -g ipv4.gateway connection show "$TARGET_CONN" || true)
+    CUR_DNS=$(nmcli -g ipv4.dns connection show "$TARGET_CONN" || true)
+    CUR_METH=$(nmcli -g ipv4.method connection show "$TARGET_CONN" || true)
+
+    if [ "$CUR_IP" != "$DESIRED_IP" ] || [ "$CUR_GW" != "$DESIRED_GW" ] || [ "$CUR_DNS" != "$DESIRED_DNS" ] || [ "$CUR_METH" != "manual" ]; then
+      nmcli connection modify "$TARGET_CONN" \
+        ipv4.addresses "$DESIRED_IP" \
+        ipv4.gateway "$DESIRED_GW" \
+        ipv4.dns "$DESIRED_DNS" \
+        ipv4.method manual \
+        802-3-ethernet.wake-on-lan magic \
+        connection.autoconnect yes \
+        connection.autoconnect-priority 100
+      CHANGED=1
+    fi
+
+    if [ $CHANGED -eq 1 ]; then
+      nmcli connection up "$TARGET_CONN" >/dev/null || true
+      echo "CHANGED"
+    else
+      echo "OK"
+    fi
+  args:
+    executable: /bin/bash
+  register: nmcli_config
+  changed_when: "'CHANGED' in nmcli_config.stdout"
+  when:
+    - not has_netplan
+    - has_nmcli
+  tags: [bootstrap, network]
+
+- name: VERIFY - Check if NetworkManager connection exists
+  shell: 'nmcli connection show | grep -E ''{{ ansible_default_ipv4.interface | default("eth0") }}|Static-KGG'''
+  register: verify_nm
+  failed_when: false
+  changed_when: false
+  when:
+    - not has_netplan
+    - has_nmcli
+  tags: [bootstrap, network]
+
+- name: ABORT - Fail if NetworkManager connection was not created
+  fail:
+    msg: "❌ FATAL: NetworkManager connection was NOT found after 'nmcli' task!"
+  when:
+    - not has_netplan
+    - has_nmcli
+    - verify_nm.rc != 0
+  tags: [bootstrap, network]
+
+# =================================================================
+# TASK 8: Apply & Reboot
+# =================================================================
+- name: Trigger reboot to apply changes
+  reboot:
+    msg: "Rebooting to apply static IP changes"
+    reboot_timeout: 300
+    post_reboot_delay: 60
+  when: (netplan_config is changed) or (nmcli_config is changed)
+  tags: [bootstrap, network]

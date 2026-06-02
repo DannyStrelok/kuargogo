@@ -1,0 +1,79 @@
+---
+- name: Provision Infrastructure Manager
+  hosts: infra
+  become: true
+  roles:
+    - common
+    - { role: unattended-upgrades, when: unattended_infra | default(false) }
+    - infra-agent
+
+  tasks:
+    # =================================================================
+    # REBOOT (If Required)
+    # =================================================================
+    - name: Check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      tags: [reboot]
+
+    - name: Reboot node and wait to come back
+      reboot:
+        msg: "Reboot initiated by kuargogo infra-init"
+        connect_timeout: 10
+        reboot_timeout: 300
+        pre_reboot_delay: 10
+        post_reboot_delay: 60
+        test_command: uptime
+      when: reboot_required.stat.exists
+      tags: [reboot]
+
+    # =================================================================
+    # SANITY CHECKS (Post-Init)
+    # =================================================================
+    - name: Check Systemd Watchdog status
+      command: busctl get-property org.freedesktop.systemd1 /org/freedesktop/systemd1 org.freedesktop.systemd1.Manager RuntimeWatchdogUSec --value
+      register: watchdog_status
+      when: ansible_architecture is search('arm') or ansible_architecture == 'aarch64'
+      changed_when: false
+      failed_when: false
+      tags: [verify, hardware]
+
+    - name: Warn if Watchdog is inactive (Requires Reboot)
+      debug:
+        msg: "⚠️  WARNING: Hardware Watchdog is inactive (0). A full system reboot may be required for /boot/firmware/config.txt changes to take effect."
+      when:
+        - (ansible_architecture is search('arm') or ansible_architecture == 'aarch64')
+        - watchdog_status.stdout | trim == '0'
+      tags: [verify, hardware]
+
+    - name: Verify Journald capping
+      command: grep "SystemMaxUse=500M" /etc/systemd/journald.conf
+      changed_when: false
+      tags: [verify, system]
+
+    # =================================================================
+    # BASTION CONNECTIVITY (Verify cluster access)
+    # =================================================================
+    - name: Verify cluster connectivity (Bastion Mode)
+      command: >
+        su -s /bin/sh {{ kgg_agent_user | default('kgg-agent') }} -c
+        "ssh -o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=no
+        -i {{ kgg_cluster_private_key_path | default('/home/' + (kgg_agent_user | default('kgg-agent')) + '/.ssh/id_rsa') }}
+        {{ hostvars[groups['server'][0]].ansible_user | default('kgg-admin') }}@{{ hostvars[groups['server'][0]].ansible_host | default(hostvars[groups['server'][0]].inventory_hostname) }}
+        uptime"
+      register: cluster_conn_test
+      ignore_errors: true
+      when: groups['server'] is defined and groups['server'] | length > 0
+      tags: [verify, connectivity]
+
+    - name: Warn if cluster is unreachable from Pi
+      debug:
+        msg: "⚠️  WARNING: Infrastructure Manager cannot reach Master node. Check SSH key distribution."
+      when: cluster_conn_test is defined and (cluster_conn_test is failed or cluster_conn_test.rc | default(0) != 0)
+      tags: [verify, connectivity]
+
+    - name: Display infra-init success
+      debug:
+        msg: "✅ Infrastructure Manager is ready, hardened, and verified as Bastion!"
+      tags: [verify]

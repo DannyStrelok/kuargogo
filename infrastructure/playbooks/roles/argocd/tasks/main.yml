@@ -1,0 +1,89 @@
+---
+
+- name: Add ArgoCD Helm repository
+  kubernetes.core.helm_repository:
+    name: argo
+    repo_url: "https://argoproj.github.io/argo-helm"
+
+- name: Deploy ArgoCD via Helm
+  kubernetes.core.helm:
+    name: argocd
+    chart_ref: argo/argo-cd
+    release_namespace: "{{ argocd_namespace }}"
+    create_namespace: true
+    chart_version: "{{ argocd_chart_version }}"
+    update_repo_cache: true
+    values:
+      repoServer:
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
+      server:
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - "{{ argocd_ingress_host }}"
+          paths:
+            - /
+        extraArgs:
+          - --insecure # Important: TLS is handled by Traefik/Cloudflare, not ArgoCD internally
+      # Optional: Disable Redis HA to save RAM on homelab
+      redis-ha:
+        enabled: false
+      controller:
+        resources:
+          requests:
+            memory: "256Mi"
+          limits:
+            memory: "512Mi"
+      applicationSet:
+        resources:
+          requests:
+            memory: "128Mi"
+          limits:
+            memory: "256Mi"
+
+# =================================================================
+# TASK 3: Deploy Sealed Secrets Controller
+# =================================================================
+- name: Add Sealed Secrets Helm repository
+  kubernetes.core.helm_repository:
+    name: sealed-secrets
+    repo_url: "https://bitnami-labs.github.io/sealed-secrets"
+  tags: [ secrets, argocd ]
+
+- name: Deploy Sealed Secrets Controller via Helm
+  kubernetes.core.helm:
+    name: sealed-secrets
+    chart_ref: sealed-secrets/sealed-secrets
+    release_namespace: kube-system
+    create_namespace: false
+    update_repo_cache: true
+  tags: [ secrets, argocd ]
+
+# =================================================================
+# TASK 4: Post-deployment info Extraction
+# =================================================================
+- name: Get ArgoCD Admin Password
+  shell: |
+    kubectl -n {{ argocd_namespace }} get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d
+  register: argocd_pass_raw
+  changed_when: false
+  failed_when: false
+  tags: [ info, argocd ]
+
+- name: Display ArgoCD Admin Password
+  debug:
+    msg: "ARGOCD_ADMIN_PASSWORD={{ argocd_pass_raw.stdout }}"
+  when: argocd_pass_raw.stdout != ""
+  tags: [ info, argocd ]

@@ -1,0 +1,136 @@
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+
+grafana:
+  enabled: true
+  deploymentStrategy:
+    type: Recreate
+  resources:
+    requests:
+      memory: "512Mi"
+    limits:
+      memory: "1Gi"
+  adminPassword: "{{ grafana_admin_password }}"
+  persistence:
+    enabled: true
+    type: pvc
+    storageClassName: longhorn
+    size: "{{ grafana_storage_size }}"
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hosts:
+      - "grafana.{{ cloudflare_domain }}"
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      uid: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+    - name: Tempo
+      type: tempo
+      uid: tempo
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      access: proxy
+      isDefault: false
+      jsonData:
+        nodeGraph:
+          enabled: true
+        lokiSearch:
+          datasourceUid: loki
+        tracesToLogsV2:
+          datasourceUid: loki
+          filterByTraceID: true
+          filterBySpanID: true
+        serviceMap:
+          datasourceUid: prometheus
+
+prometheus:
+  enabled: true
+  prometheusSpec:
+    enableRemoteWriteReceiver: true
+    replicas: 2
+    replicaExternalLabelName: "__replica__"
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - prometheus
+          topologyKey: "kubernetes.io/hostname"
+    resources:
+      requests:
+        memory: "512Mi"
+      limits:
+        memory: "2Gi"
+    securityContext:
+      fsGroup: 2000
+      runAsNonRoot: true
+      runAsUser: 1000
+    retention: {{ prometheus_retention }}
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: {{ prometheus_storage_size }}
+
+alertmanager:
+  enabled: true
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ['alertname', 'node']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: 'mqtt-bridge'
+      routes:
+        - matchers:
+            - severity="critical"
+          receiver: 'mqtt-bridge'
+          continue: true
+    receivers:
+    - name: 'mqtt-bridge'
+      webhook_configs:
+      - url: 'http://kgg-mqtt-bridge.monitoring.svc.cluster.local/webhook'
+        send_resolved: true
+  alertmanagerSpec:
+    replicas: 2
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+              - alertmanager
+          topologyKey: "kubernetes.io/hostname"
+    resources:
+      requests:
+        memory: "64Mi"
+      limits:
+        memory: "128Mi"
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 2Gi

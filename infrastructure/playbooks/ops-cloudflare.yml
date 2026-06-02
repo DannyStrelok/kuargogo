@@ -1,0 +1,7 @@
+---
+- name: Deploy Cloudflare Tunnels & Cert-Manager
+  hosts: server[0]
+  become: true
+  roles:
+    - cert-manager
+    - cloudflare

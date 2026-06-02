@@ -1,0 +1,11 @@
+---
+- name: Bootstrap Fresh Node
+  hosts: all
+  become: true
+  gather_facts: true
+
+  # Variables should be passed via --extra-vars from the CLI
+  # e.g. static_ip, gateway, dns_list
+
+  roles:
+    - bootstrap

@@ -1,0 +1,7 @@
+---
+- name: Restart K3s
+  systemd:
+    name: "{{ 'k3s' if k3s_type == 'server' else 'k3s-agent' }}"
+    state: restarted
+    daemon_reload: yes
+  when: not (k3s_force_purge | default(false) | bool)

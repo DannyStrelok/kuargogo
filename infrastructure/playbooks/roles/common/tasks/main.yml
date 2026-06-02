@@ -1,0 +1,418 @@
+---
+# =================================================================
+# Common Infrastructure Role
+# Universal base for ALL nodes (Manager, Servers, Agents)
+# =================================================================
+
+# =================================================================
+# TASK 1: Basic Node Identity & OS Config
+# =================================================================
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  tags: [system, hostname]
+
+- name: Update /etc/hosts with inventory hostname
+  lineinfile:
+    path: /etc/hosts
+    regexp: "^127\\.0\\.1\\.1"
+    line: "127.0.1.1 {{ inventory_hostname }}"
+  tags: [system, hostname]
+
+- name: Set system timezone
+  timezone:
+    name: "{{ kgg_timezone | default('UTC') }}"
+  tags: [system]
+
+# =================================================================
+# TASK 2: Repository Setup
+# =================================================================
+- name: Check if debian.sources exists (DEB822 format)
+  stat:
+    path: /etc/apt/sources.list.d/debian.sources
+  register: debian_sources_file
+  when: ansible_os_family == "Debian"
+  tags: [repos, packages]
+
+- name: Ensure non-free components in debian.sources (Debian 12/13)
+  replace:
+    path: /etc/apt/sources.list.d/debian.sources
+    regexp: "^Components: .*$"
+    replace: "Components: main contrib non-free non-free-firmware"
+  when:
+    - ansible_os_family == "Debian"
+    - debian_sources_file.stat.exists
+  tags: [repos, packages]
+
+- name: Ensure non-free repositories are enabled (Legacy sources.list)
+  shell: |
+    # Atomic replacement: capture everything up to 'main' and rewrite components in one pass.
+    # This avoids substring corruption (non-free is a substring of non-free-firmware).
+    sed -i 's/^\(deb[^ ]* [^ ]* [^ ]*\) main.*/\1 main contrib non-free non-free-firmware/' /etc/apt/sources.list
+  when:
+    - ansible_os_family == "Debian"
+    - not debian_sources_file.stat.exists
+  tags: [repos, packages]
+
+- name: Update apt cache (Forced)
+  apt:
+    update_cache: true
+  tags: [packages]
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: true
+    autoclean: true
+  tags: [packages]
+
+# =================================================================
+# TASK 3: Common Dependencies
+# =================================================================
+- name: Install common dependencies
+  apt:
+    name:
+      - sudo
+      - curl
+      - vim
+      - git
+      - htop
+      - ufw
+      - ethtool
+      - ca-certificates
+      - gnupg2
+      - util-linux
+      - iperf3
+      - usbutils
+      - python3-kubernetes
+      - python3-yaml
+    state: present
+    autoremove: true
+  tags: [packages]
+
+- name: Install PCI utilities (x86 only)
+  apt:
+    name: pciutils
+    state: present
+  when: ansible_architecture == "x86_64"
+  tags: [packages, hardware]
+
+# =================================================================
+# TASK 3.1: Storage Client Dependencies (Conditional)
+# =================================================================
+- name: Install storage dependencies (iscsi/nfs)
+  apt:
+    name:
+      - open-iscsi
+      - nfs-common
+    state: present
+  when: "'infra' not in group_names"
+  tags: [packages, storage]
+
+- name: Enable iscsid service
+  systemd:
+    name: iscsid
+    enabled: true
+    state: started
+  when: "'infra' not in group_names"
+  tags: [packages, storage]
+
+- name: Install Intel-specific packages
+  apt:
+    name:
+      - linux-headers-amd64
+      - firmware-linux
+      - intel-microcode
+      - nvme-cli
+      - intel-gpu-tools
+      - intel-media-va-driver-non-free
+      - amtterm
+    state: present
+  when: ansible_architecture == "x86_64"
+  tags: [packages, hardware]
+
+# =================================================================
+# TASK 3.5: Anti-Clone Machine Identity Healing
+# =================================================================
+- name: Check if identity was already healed for this MAC
+  shell: "cat /etc/.kgg-identity-healed 2>/dev/null || echo 'unhealed'"
+  register: identity_healed_mac
+  changed_when: false
+  when: kgg_heal_identity | bool
+  tags: [identity, system]
+
+- name: Ensure unique identity (Anti-Clone)
+  block:
+    - name: Regenerate machine-id (Prevent DHCP/IP conflicts)
+      shell: |
+        rm -f /etc/machine-id /var/lib/dbus/machine-id
+        dbus-uuidgen --ensure
+        systemd-machine-id-setup
+
+    - name: Regenerate SSH Host Keys
+      shell: |
+        rm -f /etc/ssh/ssh_host_*
+        dpkg-reconfigure openssh-server -f noninteractive
+
+    - name: Regenerate iSCSI Initiator Name
+      shell: |
+        if command -v iscsi-iname > /dev/null; then
+          echo "InitiatorName=$(iscsi-iname)" > /etc/iscsi/initiatorname.iscsi
+          systemctl restart iscsid || true
+        fi
+
+    - name: Mark identity as healed for current MAC
+      shell: "echo '{{ ansible_default_ipv4.macaddress | default('none') }}' >
+        /etc/.kgg-identity-healed"
+  when:
+    - kgg_heal_identity | bool
+    - identity_healed_mac.stdout | trim != (ansible_default_ipv4.macaddress |
+      default('none')) | trim
+  tags: [identity, system]
+
+- name: Reset Ansible connection for new SSH keys
+  meta: reset_connection
+  when:
+    - kgg_heal_identity | bool
+    - identity_healed_mac.stdout | trim != (ansible_default_ipv4.macaddress |
+      default('none')) | trim
+  tags: [identity, system]
+
+# =================================================================
+# TASK 4: User & Permissions
+# =================================================================
+- name: Create kgg-admin user
+  user:
+    name: "{{ kgg_user }}"
+    shell: /bin/bash
+    groups: sudo
+    append: true
+  when: create_user | bool
+  tags: [user]
+
+- name: Passwordless sudo for kgg-admin and ansible_user
+  copy:
+    dest: "/etc/sudoers.d/kgg-admins"
+    content: |
+      {{ kgg_user }} ALL=(ALL) NOPASSWD:ALL
+      {% if ansible_user != kgg_user %}
+      {{ ansible_user }} ALL=(ALL) NOPASSWD:ALL
+      {% endif %}
+    mode: "0440"
+    validate: "visudo -cf %s"
+  tags: [user]
+
+- name: Add /usr/local/bin to sudo secure_path
+  lineinfile:
+    path: /etc/sudoers
+    regexp: "Defaults(\\s)*secure_path(\\s)*="
+    line: "Defaults    secure_path = /sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin"
+    state: present
+    validate: "visudo -cf %s"
+  tags: [user, security]
+
+- name: Install cluster SSH public key
+  authorized_key:
+    user: "{{ kgg_user }}"
+    key:
+      "{{ lookup('file', kgg_cluster_pubkey | default('~/.ssh/kgg_cluster_id.pub'))
+      }}"
+    state: present
+  when: kgg_cluster_pubkey is defined or (lookup('file',
+    '~/.ssh/kgg_cluster_id.pub', errors='ignore') != '')
+  tags: [security, user]
+
+# =================================================================
+# TASK 5: Universal Kernel & Network Tuning
+# =================================================================
+- name: Apply common sysctl settings
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop:
+    - { key: "vm.swappiness", value: "10" }
+    - { key: "fs.file-max", value: "100000" }
+    - { key: "net.core.somaxconn", value: "1024" }
+    - { key: "net.ipv6.conf.all.disable_ipv6", value: "1" }
+    - { key: "net.ipv6.conf.default.disable_ipv6", value: "1" }
+    - { key: "net.ipv6.conf.lo.disable_ipv6", value: "1" }
+  notify: Reload Sysctl
+  tags: [kernel, network]
+
+- name: Configure hardware modules
+  copy:
+    dest: /etc/modules-load.d/hardware.conf
+    content: |
+      {% if ansible_architecture == "x86_64" %}
+      mei_me
+      {% endif %}
+  when: ansible_architecture == "x86_64"
+  tags: [kernel, hardware]
+
+- name: Load Intel MEI module
+  modprobe:
+    name: mei_me
+  when: ansible_architecture == "x86_64"
+  failed_when: false
+  tags: [kernel, hardware]
+
+# =================================================================
+# TASK 5.5: Network Hardware Stability (Intel e1000e Fix)
+# =================================================================
+- name: Determine if e1000e driver is in use
+  shell: "lsmod | grep -q e1000e"
+  register: e1000e_check
+  failed_when: false
+  changed_when: false
+  tags: [network, hardware]
+
+- name: Deploy Udev rule for e1000e stability (TSO/GSO Offload)
+  copy:
+    dest: /etc/udev/rules.d/99-e1000e-stability.rules
+    content: |
+      ACTION=="add", SUBSYSTEM=="net", DRIVERS=="e1000e", RUN+="/usr/sbin/ethtool -K %k tso off gso off"
+    mode: "0644"
+  when: e1000e_check.rc == 0
+  tags: [network, hardware]
+
+- name: Apply e1000e stability fix immediately
+  shell: "ethtool -K {{ ansible_default_ipv4.interface }} tso off gso off"
+  when:
+    - e1000e_check.rc == 0
+    - ansible_default_ipv4.interface is defined
+  failed_when: false
+  tags: [network, hardware]
+
+- name: Enable systemd-timesyncd
+  systemd:
+    name: systemd-timesyncd
+    enabled: true
+    state: started
+  tags: [system, packages]
+
+# =================================================================
+# TASK 6: Universal Firewall (UFW)
+# =================================================================
+- name: Allow SSH
+  ufw:
+    rule: allow
+    port: 22
+    proto: tcp
+    comment: "SSH"
+  tags: [firewall]
+
+- name: Allow iperf3 diagnostics
+  ufw:
+    rule: allow
+    port: 5201
+    proto: "{{ item }}"
+    comment: "iperf3 Diagnostics"
+  loop: [tcp, udp]
+  tags: [firewall]
+
+- name: Allow mDNS (Avahi)
+  ufw:
+    rule: allow
+    port: 5353
+    proto: udp
+    comment: "mDNS Discovery"
+  tags: [firewall]
+
+- name: Allow Inter-Node Trust
+  ufw:
+    rule: allow
+    src: "{{ hostvars[item].ansible_host |
+      default(hostvars[item].inventory_hostname) }}"
+    comment: "Trust Node: {{ item }}"
+  loop: "{{ groups['all'] }}"
+  when:
+    - hostvars[item].ansible_host is defined or
+      hostvars[item].inventory_hostname is defined
+    - hostvars[item].ansible_host | default(hostvars[item].inventory_hostname)
+      != ''
+  tags: [firewall]
+
+- name: Enable UFW with deny-by-default policy
+  ufw:
+    state: enabled
+    policy: deny
+    logging: "low"
+  tags: [firewall]
+
+- name: Allow packet forwarding in UFW
+  lineinfile:
+    path: /etc/default/ufw
+    regexp: "^DEFAULT_FORWARD_POLICY="
+    line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+  notify: Reload UFW
+  tags: [firewall]
+
+# =================================================================
+# TASK 6.5: Diagnostics & Status
+# =================================================================
+- name: Check AppArmor status
+  command: aa-status
+  register: aa_status
+  failed_when: false
+  changed_when: false
+  tags: [security]
+
+- name: Print AppArmor status
+  debug:
+    msg: "AppArmor is active"
+  when: aa_status.rc == 0
+  tags: [security]
+
+# =================================================================
+# TASK 7: System Maintenance & Security
+# =================================================================
+- name: Limit journald log size to 500M
+  lineinfile:
+    path: /etc/systemd/journald.conf
+    regexp: "^#?SystemMaxUse="
+    line: "SystemMaxUse=500M"
+  notify: Restart Journald
+  tags: [system]
+
+- name: Deploy SSH Alert webhook script
+  template:
+    src: ssh-alert.sh.j2
+    dest: /etc/profile.d/ssh-alert.sh
+    mode: "0755"
+  tags: [security]
+
+- name: Verify SSH Key availability before hardening
+  command: "grep -q 'ssh-' /home/{{ kgg_user }}/.ssh/authorized_keys"
+  register: ssh_key_check
+  failed_when: false
+  changed_when: false
+  when: ssh_harden | bool
+  tags: [security]
+
+- name: Disable SSH password authentication
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?PasswordAuthentication"
+    line: "PasswordAuthentication no"
+  when: (ssh_harden | bool) and (ssh_key_check.rc == 0)
+  notify: Restart SSH
+  tags: [security]
+
+- name: Optimize SSH login speed (Disable DNS)
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "^#?UseDNS"
+    line: "UseDNS no"
+  notify: Restart SSH
+  tags: [security]
+
+- name: Warn if SSH hardening skipped
+  debug:
+    msg:
+      "⚠️  SSH Hardening skipped: No authorized keys found for {{ kgg_user }}. Run
+      'kgg prep' first."
+  when: (ssh_harden | bool) and (ssh_key_check.rc != 0)
+  tags: [security]
+# Watchdog and Cgroup logic moved to specialized roles (infra-agent / k3s-prep)

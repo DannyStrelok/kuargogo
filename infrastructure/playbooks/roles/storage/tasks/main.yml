@@ -1,0 +1,50 @@
+---
+# =================================================================
+# Mount and configure storage
+# =================================================================
+- name: Fail if target_disk or mount_point are not defined
+  fail:
+    msg: "Variables 'target_disk' and 'mount_point' must be defined."
+  when: target_disk == "" or mount_point == ""
+
+- name: Create partition on disk
+  parted:
+    device: "{{ target_disk }}"
+    number: 1
+    state: present
+    fs_type: "{{ filesystem }}"
+    label: gpt
+    part_end: "100%"
+  register: partition_result
+  tags: [partition]
+
+- name: Create filesystem
+  filesystem:
+    fstype: "{{ filesystem }}"
+    dev: "{{ target_disk }}1"
+    force: no
+  tags: [partition]
+
+- name: Ensure mount point exists
+  file:
+    path: "{{ mount_point }}"
+    state: directory
+    mode: '0755'
+  tags: [mount]
+
+- name: Mount the disk
+  mount:
+    path: "{{ mount_point }}"
+    src: "{{ target_disk }}1"
+    fstype: "{{ filesystem }}"
+    opts: defaults
+    state: mounted
+  tags: [mount]
+
+- name: Set permissions (optional)
+  file:
+    path: "{{ mount_point }}"
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [mount]

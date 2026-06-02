@@ -1,0 +1,44 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{.Name}}
+  namespace: {{.Namespace}}
+  labels:
+    managed-by: kuargogo
+  finalizers:
+  - argocd.argoproj.io/resources-finalizer
+spec:
+  project: {{.Project}}
+  {{- if .IsHelm}}
+  {{- if .ValuesFile}}
+  sources:
+  - repoURL: {{.Repo | yamlQuote}}
+    chart: {{.Chart | yamlQuote}}
+    targetRevision: {{.ChartVersion | yamlQuote}}
+    helm:
+      valueFiles:
+      - $values/{{.ValuesFile}}
+  - repoURL: {{.ValuesRepo | yamlQuote}}
+    targetRevision: {{.ValuesBranch | yamlQuote}}
+    ref: values
+  {{- else}}
+  source:
+    repoURL: {{.Repo | yamlQuote}}
+    chart: {{.Chart | yamlQuote}}
+    targetRevision: {{.ChartVersion | yamlQuote}}
+  {{- end}}
+  {{- else}}
+  source:
+    repoURL: {{.Repo | yamlQuote}}
+    targetRevision: {{.Branch | yamlQuote}}
+    path: {{.Path | yamlQuote}}
+  {{- end}}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{.TargetNamespace}}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true

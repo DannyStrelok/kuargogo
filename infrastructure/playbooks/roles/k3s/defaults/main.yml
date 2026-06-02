@@ -1,0 +1,8 @@
+---
+k3s_ha: true
+k3s_vip_ip: ""
+k3s_vip_interface: ""
+k3s_vip_version: "v1.1.2"
+k3s_vip_cp_version: "v0.0.12"
+k3s_version: "v1.35.3+k3s1"
+helm_version: "v3.20.1"

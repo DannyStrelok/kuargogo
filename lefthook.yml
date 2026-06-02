@@ -1,0 +1,8 @@
+# pre-push: ejecuta linter y tests en paralelo
+pre-push:
+  parallel: true
+  commands:
+    linter:
+      run: golangci-lint run ./...
+    tests:
+      run: go test -v ./...

@@ -1,0 +1,27 @@
+---
+- name: Ensure Wildcard Certificate
+  hosts: server[0]
+  become: true
+  vars:
+    domain: "{{ target_domain }}"
+    target_namespace: "cloudflare-tunnel"
+  tasks:
+    - name: Create Certificate for *.{{ domain }}
+      kubernetes.core.k8s:
+        kubeconfig: /etc/rancher/k3s/k3s.yaml
+        state: present
+        definition:
+          apiVersion: cert-manager.io/v1
+          kind: Certificate
+          metadata:
+            name: "wildcard-{{ domain | replace('.', '-') }}"
+            namespace: "{{ target_namespace }}"
+          spec:
+            secretName: "wildcard-{{ domain | replace('.', '-') }}-tls"
+            issuerRef:
+              name: letsencrypt-cloudflare
+              kind: ClusterIssuer
+            commonName: "*.{{ domain }}"
+            dnsNames:
+              - "{{ domain }}"
+              - "*.{{ domain }}"

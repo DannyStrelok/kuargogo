@@ -1,0 +1,52 @@
+---
+
+- name: Deploy Kargo via Helm (OCI)
+  kubernetes.core.helm:
+    name: kargo
+    chart_ref: oci://ghcr.io/akuity/kargo-charts/kargo
+    release_namespace: "{{ kargo_namespace }}"
+    create_namespace: true
+    chart_version: "{{ kargo_chart_version }}"
+    update_repo_cache: true
+    values:
+      controller:
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+      api:
+        resources:
+          requests:
+            memory: "128Mi"
+          limits:
+            memory: "256Mi"
+        adminAccount:
+          passwordHash: "{{ kargo_admin_password_hash | default('') }}"
+          tokenSigningKey: "{{ kargo_token_signing_key | default('default-change-me-token-signing-key-very-long-string-12345') }}"
+        insecure: true
+        service:
+          port: 80
+          targetPort: 8080
+      # Insecure ingress (TLS handled by Traefik/Cloudflare)
+      server:
+        ingress:
+          enabled: true
+          ingressClassName: traefik
+          hosts:
+            - host: "{{ kargo_ingress_host }}"
+              paths:
+                - path: /
+                  pathType: ImplementationSpecific
+
+- name: Wait for Kargo controller to be ready
+  kubernetes.core.k8s_info:
+    kind: Deployment
+    name: kargo-controller
+    namespace: "{{ kargo_namespace }}"
+  register: kargo_deploy
+  until: kargo_deploy.resources[0].status.readyReplicas | default(0) > 0
+  retries: 30
+  delay: 10

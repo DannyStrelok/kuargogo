@@ -1,0 +1,6 @@
+---
+- name: Restart Multipathd
+  systemd:
+    name: multipathd
+    state: restarted
+  failed_when: false

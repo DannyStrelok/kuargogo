@@ -1,0 +1,6 @@
+---
+cert_manager_namespace: "cert-manager"
+cert_manager_version: "v1.16.1"
+cloudflare_api_token: ""
+cloudflare_email: ""
+cloudflare_domain: "chefclandestino.es"

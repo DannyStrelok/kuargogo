@@ -1,0 +1,30 @@
+---
+- name: Install unattended-upgrades package
+  apt:
+    name:
+      - unattended-upgrades
+      - apt-listchanges
+    state: present
+    update_cache: true
+
+- name: Configure unattended-upgrades (50unattended-upgrades)
+  template:
+    src: 50unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Enable periodic apt upgrades (20auto-upgrades)
+  template:
+    src: 20auto-upgrades.j2
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Ensure unattended-upgrades service is enabled and started
+  systemd:
+    name: unattended-upgrades
+    enabled: true
+    state: started

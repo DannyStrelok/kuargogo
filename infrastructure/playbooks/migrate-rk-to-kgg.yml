@@ -1,0 +1,189 @@
+---
+- name: Migrate Homelab from rk-admin to kgg-admin
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    # During migration, we connect using whatever user is currently active.
+    # The user should configure "user: rk-admin" in kuargogo.yaml for this run,
+    # or run it passing the -u rk-admin flag.
+    old_user: "rk-admin"
+    new_user: "kgg-admin"
+
+  tasks:
+    # =================================================================
+    # Step 1: Validate system state
+    # =================================================================
+    - name: Verify we can connect and old user exists
+      getent:
+        database: passwd
+        key: "{{ old_user }}"
+      register: old_user_exists
+      failed_when: false
+
+    - name: Fail if old user does not exist and we are not already connected as new user
+      fail:
+        msg: "Old user '{{ old_user }}' was not found, and connection might be broken."
+      when: old_user_exists.failed and not ansible_user == new_user
+
+    # =================================================================
+    # Step 2: Create new kgg-admin user
+    # =================================================================
+    - name: Create kgg-admin user
+      user:
+        name: "{{ new_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: true
+        state: present
+      when: not old_user_exists.failed or ansible_user == old_user
+
+    # =================================================================
+    # Step 3: Setup Passwordless Sudo for kgg-admin
+    # =================================================================
+    - name: Configure passwordless sudo for kgg-admin
+      copy:
+        dest: "/etc/sudoers.d/kgg-admins"
+        content: |
+          {{ new_user }} ALL=(ALL) NOPASSWD:ALL
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    # =================================================================
+    # Step 4: Replicate SSH keys from rk-admin to kgg-admin
+    # =================================================================
+    - name: Ensure kgg-admin .ssh directory exists
+      file:
+        path: "/home/{{ new_user }}/.ssh"
+        state: directory
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+        mode: "0700"
+
+    - name: Check if rk-admin has SSH keys
+      stat:
+        path: "/home/{{ old_user }}/.ssh/authorized_keys"
+      register: rk_ssh_keys
+      when: not old_user_exists.failed
+
+    - name: Copy authorized_keys from rk-admin to kgg-admin
+      copy:
+        src: "/home/{{ old_user }}/.ssh/authorized_keys"
+        dest: "/home/{{ new_user }}/.ssh/authorized_keys"
+        remote_src: true
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+        mode: "0600"
+      when:
+        - not old_user_exists.failed
+        - rk_ssh_keys.stat.exists
+
+    - name: Ensure current cluster public key is authorized for new user
+      authorized_key:
+        user: "{{ new_user }}"
+        key: "{{ lookup('file', kgg_cluster_pubkey | default('~/.ssh/kgg_cluster_id.pub')) }}"
+        state: present
+      when: kgg_cluster_pubkey is defined or (lookup('file', '~/.ssh/kgg_cluster_id.pub', errors='ignore') != '')
+
+    # =================================================================
+    # Step 5: Migrate files and configurations
+    # =================================================================
+    - name: Check if rk-admin has any .kuargogo configuration
+      stat:
+        path: "/home/{{ old_user }}/.kuargogo"
+      register: rk_config_dir
+      when: not old_user_exists.failed
+
+    - name: Migrate .kuargogo folder to kgg-admin
+      copy:
+        src: "/home/{{ old_user }}/.kuargogo/"
+        dest: "/home/{{ new_user }}/.kuargogo/"
+        remote_src: true
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+        mode: "0700"
+      when:
+        - not old_user_exists.failed
+        - rk_config_dir.stat.exists and rk_config_dir.stat.isdir
+
+    - name: Check if rk-admin has .kube configuration
+      stat:
+        path: "/home/{{ old_user }}/.kube"
+      register: rk_kube_dir
+      when: not old_user_exists.failed
+
+    - name: Migrate .kube folder to kgg-admin
+      copy:
+        src: "/home/{{ old_user }}/.kube/"
+        dest: "/home/{{ new_user }}/.kube/"
+        remote_src: true
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+      when:
+        - not old_user_exists.failed
+        - rk_kube_dir.stat.exists and rk_kube_dir.stat.isdir
+
+    # =================================================================
+    # Step 6: Raspberry Pi Specific (infra-manager) migrations
+    # =================================================================
+    - name: Determine if this host is the Raspberry Pi manager
+      set_fact:
+        is_pi: "{{ 'infra' in group_names or inventory_hostname == 'rpi-infra-mgr' }}"
+
+    - name: Stop and disable legacy rk-agent and rk-telegram services
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - rk-agent
+        - rk-telegram
+      failed_when: false
+      when: is_pi | bool
+
+    - name: Remove legacy rk service systemd files
+      file:
+        path: "/etc/systemd/system/{{ item }}.service"
+        state: absent
+      loop:
+        - rk-agent
+        - rk-telegram
+      when: is_pi | bool
+
+    - name: Migrate existing kgg-agent or rk-agent home directory to kgg-admin
+      copy:
+        src: "/home/{{ old_user }}/kgg-agent/"
+        dest: "/home/{{ new_user }}/kgg-agent/"
+        remote_src: true
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+      failed_when: false
+      when: is_pi | bool
+
+    - name: Migrate legacy rk-agent home directory to kgg-admin
+      copy:
+        src: "/home/{{ old_user }}/rk-agent/"
+        dest: "/home/{{ new_user }}/kgg-agent/"
+        remote_src: true
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+      failed_when: false
+      when: is_pi | bool
+
+
+    # =================================================================
+    # Step 7: Final verification & information
+    # =================================================================
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: true
+      when: is_pi | bool
+
+    - name: Display migration summary
+      debug:
+        msg: |
+          🎉 Migration to 'kgg-admin' successfully completed on {{ inventory_hostname }}!
+          Please perform the following actions:
+          1. Update your local 'kuargogo.yaml' file by changing the 'user' of each node to 'kgg-admin' (or delete it to use the new default).
+          2. Run 'kgg infra init' to redeploy Mosquitto and systemd services under 'kgg-admin' on the Pi.
+          3. Once everything is verified and working, you can safely remove the old 'rk-admin' user.

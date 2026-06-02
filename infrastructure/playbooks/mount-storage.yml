@@ -1,0 +1,10 @@
+---
+- name: Mount and Configure Storage
+  hosts: k3s_cluster
+  become: true
+  vars:
+    target_disk: ""
+    mount_point: ""
+    filesystem: "ext4"
+  roles:
+    - role: storage

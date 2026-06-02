@@ -1,0 +1,17 @@
+---
+- name: Restart kgg-agent
+  systemd:
+    name: kgg-agent
+    state: restarted
+    daemon_reload: true
+
+- name: Restart kgg-telegram
+  systemd:
+    name: kgg-telegram
+    state: restarted
+    daemon_reload: true
+
+- name: Restart Mosquitto (Broker)
+  systemd:
+    name: mosquitto
+    state: restarted

@@ -1,0 +1,24 @@
+[Unit]
+Description=Kuargogo Telegram Bridge (The Voice)
+After=network-online.target kgg-agent.service
+
+[Service]
+Type=simple
+User={{ kgg_agent_user | default('kgg-admin') }}
+WorkingDirectory={{ kgg_agent_home }}
+Environment="TELEGRAM_TOKEN={{ telegram_token }}"
+Environment="TELEGRAM_ADMIN_ID={{ telegram_admin_id }}"
+Environment="TELEGRAM_TIMEZONE={{ telegram_timezone | default('Europe/Madrid') }}"
+Environment="TELEGRAM_SUMMARY_TIME={{ telegram_summary_time | default('08:30') }}"
+Environment="KGG_MAINTENANCE_MODE={{ kgg_maintenance_mode | default('false') }}"
+Environment="KGG_MASTER_PASSPHRASE={{ kgg_master_passphrase | default('') }}"
+Environment="KGG_BIN=/usr/local/bin/kgg"
+Environment="KGG_CLUSTER_KEY_PATH={{ kgg_cluster_private_key_path }}"
+Environment='KGG_NODES={{ nodes | default("[]") }}'
+Environment='ALLOWED_PATHS={{ telegram_allowed_paths | default(["/var/log", "/etc/kgg"]) | to_json(separators=(",", ":")) }}'
+ExecStart={{ kgg_agent_home }}/kgg-env/bin/python -m kgg_telegram
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
