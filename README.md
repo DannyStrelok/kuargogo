@@ -1,6 +1,7 @@
 # 🚀 Kuargogo (kgg)
 
 <p align="center">
+  <img width="700" height="596" alt="kuargogo" src="https://github.com/user-attachments/assets/6b83eb69-58ec-481d-869e-3ea20cde3662" />
   <a href="https://github.com/DannyStrelok/kuargogo/releases"><img src="https://img.shields.io/github/v/release/DannyStrelok/kuargogosvg" alt="Latest Release"></a>
   <a href="https://github.com/DannyStrelok/kuargogo/actions"><img src="https://github.com/DannyStrelok/kuargogo/actions/workflows/build.yml/badge.svg?branch=main" alt="Build Status"></a>
 </p>
