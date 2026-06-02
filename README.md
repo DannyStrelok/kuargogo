@@ -2,13 +2,11 @@
 
 <p align="center">
   <img width="700" height="596" alt="kuargogo" src="https://github.com/user-attachments/assets/6b83eb69-58ec-481d-869e-3ea20cde3662" /><br />
-  <a href="https://github.com/DannyStrelok/kuargogo/releases"><img src="https://img.shields.io/github/v/release/DannyStrelok/kuargogosvg" alt="Latest Release"></a>
-  <a href="https://github.com/DannyStrelok/kuargogo/actions"><img src="https://github.com/DannyStrelok/kuargogo/actions/workflows/build.yml/badge.svg?branch=main" alt="Build Status"></a>
+  <a href="https://github.com/DannyStrelok/kuargogo/actions"><img src="https://github.com/DannyStrelok/kuargogo/actions/workflows/ci.yml/badge.svg?branch=main" alt="Build Status"></a>
+  <a href="https://github.com/DannyStrelok/kuargogo/releases"><img src="https://img.shields.io/github/v/release/DannyStrelok/kuargogo?include_prereleases" alt="Latest Release"></a>
+  <a href="https://github.com/DannyStrelok/kuargogo"><img src="https://img.shields.io/github/go-mod/go-version/DannyStrelok/kuargogo" alt="Go Version"></a>
+  <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
 </p>
-
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/DannyStrelok/kuargogo)](https://github.com/DannyStrelok/kuargogo)
-[![Releases](https://img.shields.io/github/v/release/DannyStrelok/kuargogo?include_prereleases)](https://github.com/DannyStrelok/kuargogo/releases)
 
 **Kuargogo (`kgg`)** is a professional, open-source command-center CLI and TUI designed for modern homelabs. Built in Go, Kuargogo bridges the gap between infrastructure management, container orchestration, hardware telemetry, and local AI capabilities. 
 
