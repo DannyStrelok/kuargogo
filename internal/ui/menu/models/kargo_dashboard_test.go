@@ -1,4 +1,4 @@
-﻿package models
+package models
 
 import (
 	"errors"
@@ -112,4 +112,3 @@ func TestFindArgoAppForStage(t *testing.T) {
 		t.Errorf("expected no app match for 'test'")
 	}
 }
-

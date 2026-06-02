@@ -94,4 +94,3 @@ func (m *Manager) GetLiveNodes(masterIP string) ([]string, error) {
 
 	return nodes, nil
 }
-

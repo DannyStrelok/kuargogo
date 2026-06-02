@@ -11,6 +11,7 @@ import (
 
 	"github.com/DannyStrelok/kuargogo/internal/config"
 	"github.com/DannyStrelok/kuargogo/internal/i18n"
+	"github.com/DannyStrelok/kuargogo/internal/version"
 )
 
 type EngineModel interface {
@@ -384,7 +385,7 @@ func (e Engine) renderBreadcrumbs() string {
 	// Show banner only if we are at the root (Main Menu) and have enough vertical space
 	if e.showBanner() {
 		header += e.theme.BannerStyle().Render(e.theme.Banner()) + "\n"
-		header += e.theme.SubtitleStyle().Render("  Homelab Management CLI") + "\n"
+		header += e.theme.SubtitleStyle().Render(fmt.Sprintf("  Homelab Management CLI (%s)", version.Current)) + "\n"
 	}
 
 	// Start with "Main"

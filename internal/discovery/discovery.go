@@ -92,4 +92,3 @@ func GuessArchitecture(s MDNSService, mac string) string {
 
 	return "" // Unknown
 }
-

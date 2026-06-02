@@ -1,4 +1,4 @@
-﻿package ai
+package ai
 
 import (
 	"bufio"
@@ -267,4 +267,3 @@ func Anonymize(text string) string {
 	re := regexp.MustCompile(ipRegex)
 	return re.ReplaceAllString(text, "[IP_ANONYMIZED]")
 }
-

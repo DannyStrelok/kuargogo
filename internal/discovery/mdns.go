@@ -27,7 +27,7 @@ func DiscoverMDNS(serviceType string, timeout time.Duration) ([]MDNSService, err
 	entries := make(chan *zeroconf.ServiceEntry)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	
+
 	var results []MDNSService
 
 	err = resolver.Browse(ctx, serviceType, "local.", entries)

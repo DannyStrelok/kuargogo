@@ -1,4 +1,4 @@
-﻿package actions
+package actions
 
 import (
 	tea "charm.land/bubbletea/v2"

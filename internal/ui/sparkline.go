@@ -2,9 +2,9 @@ package ui
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"strings"
-	"image/color"
 
 	"charm.land/lipgloss/v2"
 )

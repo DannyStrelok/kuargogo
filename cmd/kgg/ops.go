@@ -526,4 +526,3 @@ func runOpsKargo(cmd *cobra.Command, args []string) error {
 	sendNotification(result)
 	return nil
 }
-

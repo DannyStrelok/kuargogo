@@ -1,4 +1,4 @@
-﻿package actions
+package actions
 
 import (
 	"fmt"
@@ -35,4 +35,3 @@ func ScanNetwork() tea.Cmd {
 		return ScanResultMsg{Output: sb.String()}
 	}
 }
-

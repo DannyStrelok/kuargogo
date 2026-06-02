@@ -1,4 +1,4 @@
-﻿package models
+package models
 
 import (
 	tea "charm.land/bubbletea/v2"
@@ -59,4 +59,3 @@ func (m *FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *FormModel) View() tea.View {
 	return tea.NewView("\n" + m.form.View())
 }
-

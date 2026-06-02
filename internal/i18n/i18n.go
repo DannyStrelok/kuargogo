@@ -11,7 +11,7 @@ import (
 var localesFS embed.FS
 
 var (
-	currentLang = "en"
+	currentLang  = "en"
 	translations = make(map[string]map[string]string)
 	mu           sync.RWMutex
 )

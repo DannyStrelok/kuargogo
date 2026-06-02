@@ -1,4 +1,4 @@
-﻿package models
+package models
 
 import (
 	"charm.land/bubbles/v2/list"
@@ -39,16 +39,16 @@ func (m *MenuModel) MouseMode() tea.MouseMode {
 
 func (m *MenuModel) ApplyTheme(t engine.Theme) {
 	m.theme = t
-	
+
 	// Update list delegate styles for a professional 'terminal moderna' look
 	d := list.NewDefaultDelegate()
-	
+
 	// Use Accent color for selected items instead of default pink
 	d.Styles.SelectedTitle = d.Styles.SelectedTitle.
 		Foreground(t.AccentColor()).
 		BorderLeft(true).
 		BorderForeground(t.AccentColor())
-		
+
 	d.Styles.SelectedDesc = d.Styles.SelectedDesc.
 		Foreground(t.AccentColor()).
 		BorderLeft(true).
@@ -56,7 +56,7 @@ func (m *MenuModel) ApplyTheme(t engine.Theme) {
 
 	d.Styles.NormalTitle = d.Styles.NormalTitle.Foreground(t.PrimaryColor())
 	d.Styles.NormalDesc = d.Styles.NormalDesc.Foreground(t.MutedColor())
-	
+
 	m.list.SetDelegate(d)
 }
 
@@ -141,4 +141,3 @@ func (m *MenuModel) updateListItems() {
 	}
 	m.list.SetItems(items)
 }
-

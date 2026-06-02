@@ -211,4 +211,3 @@ func (m *Manager) RemoveCredential(url string) error {
 	}
 	return config.SaveConfig()
 }
-

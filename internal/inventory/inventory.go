@@ -1,4 +1,4 @@
-﻿package inventory
+package inventory
 
 import (
 	"fmt"
@@ -54,4 +54,3 @@ func GetInventory() []NodeEntry {
 	wg.Wait()
 	return entries
 }
-

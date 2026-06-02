@@ -17,6 +17,7 @@ import (
 	"github.com/DannyStrelok/kuargogo/internal/ui/engine"
 	"github.com/DannyStrelok/kuargogo/internal/ui/menu/models"
 	"github.com/DannyStrelok/kuargogo/internal/ui/wizard"
+	"github.com/DannyStrelok/kuargogo/internal/version"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -31,7 +32,7 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "kgg",
-	Short: "Kuargogo - Homelab Management CLI",
+	Short: "Kuargogo - Homelab Management CLI (" + version.Current + ")",
 	Long: `kgg (Kuargogo) is a CLI tool to manage your homelab infrastructure.
 It controls provisioning, K3s cluster lifecycle, hardware sensors (MQTT), and AI services.`,
 	Run: func(cmd *cobra.Command, args []string) {

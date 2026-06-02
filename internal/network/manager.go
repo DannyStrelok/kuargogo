@@ -1,4 +1,4 @@
-﻿package network
+package network
 
 import (
 	"fmt"
@@ -201,4 +201,3 @@ func (m *Manager) GetNetworkMap(nodes []config.Node) (*NetworkMap, error) {
 
 	return netMap, nil
 }
-
