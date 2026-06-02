@@ -18,7 +18,7 @@ require (
 	github.com/cloudflare/cloudflare-go v0.116.0
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.19.0
-	github.com/fsnotify/fsnotify v1.9.0
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/go-viper/mapstructure/v2 v2.4.0
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
