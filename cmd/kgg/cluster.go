@@ -12,9 +12,9 @@ import (
 )
 
 var clusterCmd = &cobra.Command{
-	Use:   "cluster [init|join|drain|reset|remediate]",
+	Use:   "cluster [init|join|drain|reset|remediate|storage-heal]",
 	Short: "Manage K3s cluster lifecycle",
-	Args:  cobra.ExactArgs(1), // init, join, drain, reset, remediate
+	Args:  cobra.ExactArgs(1), // init, join, drain, reset, remediate, storage-heal
 	Run: func(cmd *cobra.Command, args []string) {
 		action := args[0]
 		tagsFlag, _ := cmd.Flags().GetString("tags")
@@ -64,8 +64,10 @@ var clusterCmd = &cobra.Command{
 			runClusterReset(cmd, tags)
 		case "remediate":
 			runClusterRemediate(cmd, masterNode, tags)
+		case "storage-heal":
+			runClusterStorageHeal(cmd, masterNode)
 		default:
-			fmt.Println("Unknown action. Use: init, join, drain, reset, remediate")
+			fmt.Println("Unknown action. Use: init, join, drain, reset, remediate, storage-heal")
 		}
 	},
 }
@@ -277,10 +279,55 @@ func runClusterRemediate(cmd *cobra.Command, masterNode *config.Node, tags []str
 	fmt.Printf("✅ Remediation completed successfully for %s!\n", targetNodeName)
 }
 
+func runClusterStorageHeal(cmd *cobra.Command, masterNode *config.Node) {
+	heal, _ := cmd.Flags().GetBool("heal")
+
+	cfg := config.GetConfig()
+	keyPath, err := cfg.SSH.ExpandedKeyPath()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	mgr := cluster.NewManager(masterNode.User, keyPath, cfg.SSH.Port, DryRun)
+	mgr.Output = os.Stdout
+
+	fmt.Println("🩺 Starting K3s Longhorn Storage Health Check...")
+	if heal {
+		fmt.Println("⚠️  Storage healing is enabled. Unhealthy disks will be evicted.")
+	}
+
+	results, err := mgr.CheckAndHealStorage(masterNode, heal)
+	if err != nil {
+		fmt.Printf("❌ Storage check failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("\n📋 Storage Health Results:")
+	fmt.Println(strings.Repeat("-", 60))
+	for _, res := range results {
+		statusIcon := "✅"
+		switch res.Status {
+		case "failing":
+			statusIcon = "❌"
+		case "missing_smartctl", "unsupported":
+			statusIcon = "⚠️"
+		}
+
+		fmt.Printf("%s Node: %s | Disk: %s | Path: %s | Device: %s\n", statusIcon, res.NodeName, res.DiskID, res.Path, res.Device)
+		fmt.Printf("   Status: %s | Message: %s\n", res.Status, res.Message)
+		if res.Healed {
+			fmt.Println("   👉 HEALING ACTION TAKEN: Disk marked for eviction.")
+		}
+		fmt.Println(strings.Repeat("-", 60))
+	}
+}
+
 func init() {
 	clusterCmd.Flags().String("node", "", "Target Node IP (join/reset)")
 	clusterCmd.Flags().String("name", "", "Target Node Name (drain/reset)")
 	clusterCmd.Flags().Bool("ha", false, "Initialize cluster in HA mode (init only)")
 	clusterCmd.Flags().String("tags", "", "Comma-separated Ansible tags to run")
+	clusterCmd.Flags().Bool("heal", false, "Trigger automated eviction/healing on SMART failures")
 	rootCmd.AddCommand(clusterCmd)
 }

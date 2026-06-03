@@ -29,7 +29,7 @@ This document outlines the development path for the **Kuargogo (`kuargogo`)** pr
 ### v0.7.0 - The "Autonomous Recovery" Update
 *Focus on self-healing infrastructure, core diagnostics, and hardware pluggability.*
 - [x] **K3s Node Remediation**: `kuargogo` daemon automatically drains and re-joins misbehaving worker nodes.
-- [ ] **Storage Healing**: Automated Longhorn replica rebuilding via API when a disk smart check fails.
+- [x] **Storage Healing**: Automated Longhorn replica rebuilding via API when a disk smart check fails.
 - [ ] **AI Log Analysis & Ollama Fallbacks**:
   - Use local Ollama to parse failing Kubernetes pod logs and suggest SRE fixes via Telegram bot.
   - Implement fallback templates for lightweight models (Llama3-8B, Phi3) and local host proxying when a GPU is absent.

@@ -76,6 +76,15 @@ async def mqtt_alert_listener(ctx):
                         InlineKeyboardButton(text="🛠️ Remediate Node", callback_data=f"k3s_remediate:{node_name}")
                     ])
 
+                if "SMART Check Failure" in alert_msg or "❌ Node:" in alert_msg:
+                    storage_match = re.search(r"Node:\s*([^\s|]+).*Disk:\s*([^\s|]+)", alert_msg)
+                    if storage_match:
+                        node_name = storage_match.group(1)
+                        disk_id = storage_match.group(2)
+                        kb_list.insert(0, [
+                            InlineKeyboardButton(text="🛠️ Evict Disk", callback_data=f"k3s_evict_disk:{node_name}:{disk_id}")
+                        ])
+
                 kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
                 await ctx.bot.send_message(
                     chat_id=TG_ADMIN_ID,

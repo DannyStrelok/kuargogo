@@ -38,6 +38,8 @@ DISK_WARN_THRESHOLD = int(os.getenv("KGG_DISK_WARN_PCT", "85"))
 DISK_CHECK_INTERVAL = int(os.getenv("KGG_DISK_CHECK_INTERVAL", "600"))
 # How often to check node health (seconds)
 NODE_CHECK_INTERVAL = int(os.getenv("KGG_NODE_CHECK_INTERVAL", "30"))
+# How often to check storage health (seconds)
+STORAGE_CHECK_INTERVAL = int(os.getenv("KGG_STORAGE_CHECK_INTERVAL", "7200"))
 
 # --- Configuration (Read from environment variables) ---
 from kgg_common import load_json_env
@@ -321,6 +323,50 @@ def check_k3s_health():
     except Exception as e:
         logger.debug(f"Longhorn volume health check failed: {e}")
 
+def check_storage_health():
+    """Check SMART status of Longhorn disks and heal if enabled."""
+    if load_setting("k3s_monitoring", "0") == "0":
+        return
+
+    # Find the master node to query Longhorn
+    master = next(
+        (n for n in AGENT_NODES if n.get('role') in ['server', 'master', 'control-plane']),
+        None
+    )
+    if not master:
+        return
+
+    with alert_lock:
+        failures = alert_state["node_failures"].get(master['name'], 0)
+    if failures > 0:
+        logger.debug(f"Skipping storage health checks: Master '{master['name']}' is currently failing pings.")
+        return
+
+    try:
+        heal_enabled = load_setting("storage_healing", "0") == "1"
+        cmd = [AGENT_KGG_BIN, "cluster", "storage-heal"]
+        if heal_enabled:
+            cmd.append("--heal")
+
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+        lines = res.stdout.split('\n')
+        for line in lines:
+            if "❌ Node:" in line:
+                send_alert(f"🚨 <b>SMART Check Failure</b>\n{line.strip()}")
+            elif "⚠️ Node:" in line:
+                import re
+                match = re.search(r"Node:\s*([^\s|]+)", line)
+                if match:
+                    node_name = match.group(1)
+                    warning_key = f"storage_warn_{node_name}"
+                    with alert_lock:
+                        if not alert_state.get(warning_key):
+                            send_alert(f"⚠️ <b>Storage Warning</b> on <code>{node_name}</code>\n{line.strip()}\nPlease install <code>smartctl</code>.")
+                            alert_state[warning_key] = True
+    except Exception as e:
+        logger.debug(f"Storage health check failed: {e}")
+
 # --- Database ---
 def init_db():
     """Initialize database tables if they don't exist."""
@@ -494,6 +540,7 @@ def brain_loop():
     """Main monitoring loop. Spawns health checks on their configured intervals."""
     last_node_check = time.time() - NODE_CHECK_INTERVAL + 5  # First check after 5s
     last_disk_check = time.time()
+    last_storage_check = time.time() - STORAGE_CHECK_INTERVAL + 15  # First check after 15s
 
     while True:
         now = time.time()
@@ -505,6 +552,10 @@ def brain_loop():
         if now - last_disk_check >= DISK_CHECK_INTERVAL:
             last_disk_check = now
             threading.Thread(target=check_disk_usage, daemon=True).start()
+
+        if now - last_storage_check >= STORAGE_CHECK_INTERVAL:
+            last_storage_check = now
+            threading.Thread(target=check_storage_health, daemon=True).start()
 
         time.sleep(1)
 

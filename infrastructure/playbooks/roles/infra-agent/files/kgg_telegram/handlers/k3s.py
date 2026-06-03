@@ -53,6 +53,11 @@ async def cb_k3s(ctx, callback: CallbackQuery, state: FSMContext):
     elif data.startswith("remediate:"):
         node_name = data.replace("remediate:", "")
         await run_manual_remediation(ctx, callback.message, node_name)
+    elif data.startswith("evict_disk:"):
+        parts = data.replace("evict_disk:", "").split(":")
+        if len(parts) == 2:
+            node_name, disk_id = parts[0], parts[1]
+            await run_manual_eviction(ctx, callback.message, node_name, disk_id)
 
 async def run_manual_remediation(ctx, message: Message, node_name: str):
     try:
@@ -79,6 +84,34 @@ async def run_manual_remediation(ctx, message: Message, node_name: str):
             await message.answer(f"✅ Manual K3s Node Remediation Success for {html.escape(node_name)}!")
         else:
             await message.answer(f"❌ Manual K3s Node Remediation Failed for {html.escape(node_name)}!")
+
+
+async def run_manual_eviction(ctx, message: Message, node_name: str, disk_id: str):
+    try:
+        node_name = sanitize_shell_arg(node_name, label="node name")
+        disk_id = sanitize_shell_arg(disk_id, label="disk ID")
+    except ValueError as e:
+        await message.answer(f"🚫 <b>Invalid argument:</b> {e}")
+        return
+
+    sent = await message.answer(f"🛠️ <b>Starting Manual Disk Eviction for {html.escape(node_name)} (Disk: {html.escape(disk_id)})...</b>")
+
+    master = _get_master(ctx.nodes)
+    patch_cmd = f"sudo k3s kubectl patch nodes.longhorn.io {node_name} -n longhorn-system --type merge -p '{{\"spec\": {{\"disks\": {{\"{disk_id}\": {{\"allowScheduling\": false, \"evictionRequested\": true}}}}}}}}'"
+
+    success, out, err = await run_kgg_cmd(["ssh", master, patch_cmd], timeout=60)
+
+    try:
+        if success:
+            await sent.edit_text(f"✅ <b>Manual Disk Eviction Initiated!</b>\nNode: <code>{html.escape(node_name)}</code>\nDisk: <code>{html.escape(disk_id)}</code>\n\nReplicas are being evacuated off this disk.")
+        else:
+            await sent.edit_text(f"❌ <b>Manual Disk Eviction Failed!</b>\nNode: <code>{html.escape(node_name)}</code>\nDisk: <code>{html.escape(disk_id)}</code>\n\nError: <pre>{html.escape(err or out)}</pre>")
+    except Exception as e:
+        logger.error(f"Failed to edit message: {e}")
+        if success:
+            await message.answer(f"✅ Manual Disk Eviction Initiated for {html.escape(node_name)} (Disk: {html.escape(disk_id)})!")
+        else:
+            await message.answer(f"❌ Manual Disk Eviction Failed for {html.escape(node_name)} (Disk: {html.escape(disk_id)})!")
 
 
 async def _run_k3s_nodes(ctx, message: Message):
