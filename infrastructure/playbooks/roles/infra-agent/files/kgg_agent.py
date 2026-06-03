@@ -12,6 +12,7 @@ import os
 import subprocess
 import logging
 from logging.handlers import RotatingFileHandler
+import html
 
 __version__ = "0.2.0"
 
@@ -37,6 +38,8 @@ DISK_WARN_THRESHOLD = int(os.getenv("KGG_DISK_WARN_PCT", "85"))
 DISK_CHECK_INTERVAL = int(os.getenv("KGG_DISK_CHECK_INTERVAL", "600"))
 # How often to check node health (seconds)
 NODE_CHECK_INTERVAL = int(os.getenv("KGG_NODE_CHECK_INTERVAL", "30"))
+# How often to check storage health (seconds)
+STORAGE_CHECK_INTERVAL = int(os.getenv("KGG_STORAGE_CHECK_INTERVAL", "7200"))
 
 # --- Configuration (Read from environment variables) ---
 from kgg_common import load_json_env
@@ -65,6 +68,7 @@ alert_state = {
     "node_failures": {},     # {node_name: consecutive_failed_pings}
     "recovering_nodes": set(), # Nodes currently being recovery-processed
     "k3s_node_alerts": {},   # {node_name: alert_sent}
+    "k3s_node_failures": {}, # {node_name: consecutive_notready_checks}
     "k3s_volume_alerts": {}, # {vol_name: alert_sent}
 }
 
@@ -189,6 +193,41 @@ def check_node_health():
         except Exception as e:
             logger.debug(f"Node health check error for {node.get('name', '?')}: {e}")
 
+def run_k3s_node_remediation(node_name):
+    """Run the kgg cluster remediate command in a background thread."""
+    if load_setting("maintenance_mode", "0") == "1" or \
+       load_setting(f"maintenance_{node_name}", "0") == "1":
+        logger.info(f"Aborting autonomous remediation for '{node_name}': Node is in maintenance mode.")
+        with alert_lock:
+            alert_state["recovering_nodes"].discard(node_name)
+        return
+
+    try:
+        msg = f"🐳 Kubernetes Node '{node_name}' has been NotReady for 20 checks (10 minutes). Initiating autonomous K3s Node Remediation..."
+        send_alert(msg)
+        log_incident("RECOVERY", node_name, msg)
+
+        # Run kgg command with 5-minute timeout
+        cmd = [AGENT_KGG_BIN, "cluster", "remediate", "--name", node_name]
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        if res.returncode == 0:
+            success_msg = f"✅ Autonomous remediation for Kubernetes Node '{node_name}' completed successfully."
+            send_alert(success_msg)
+            log_incident("RECOVERY", node_name, success_msg)
+        else:
+            stderr_esc = html.escape(res.stderr or res.stdout or "Unknown error")
+            err_msg = f"❌ Autonomous remediation for Kubernetes Node '{node_name}' failed!\nError: {stderr_esc}"
+            send_alert(err_msg)
+            log_incident("RECOVERY", node_name, err_msg)
+    except Exception as e:
+        err_msg = f"❌ Autonomous remediation error for Kubernetes Node '{node_name}': {html.escape(str(e))}"
+        send_alert(err_msg)
+        log_incident("RECOVERY", node_name, err_msg)
+    finally:
+        with alert_lock:
+            alert_state["recovering_nodes"].discard(node_name)
+
 def check_k3s_health():
     """Check K3s node states and Longhorn volume states via kgg ssh to a master node."""
     if load_setting("k3s_monitoring", "0") == "0":
@@ -215,19 +254,48 @@ def check_k3s_health():
         )
         if res.returncode == 0:
             data = json.loads(res.stdout)
+            active_nodes = set()
             for item in data.get('items', []):
                 node_name = item['metadata']['name']
+                active_nodes.add(node_name)
                 conditions = item.get('status', {}).get('conditions', [])
                 ready = next((c for c in conditions if c['type'] == 'Ready'), None)
                 with alert_lock:
-                    if ready and ready['status'] != 'True':
+                    is_ready = ready and ready['status'] == 'True'
+                    if not is_ready:
+                        # Increment consecutive failures
+                        notready_count = alert_state["k3s_node_failures"].get(node_name, 0) + 1
+                        alert_state["k3s_node_failures"][node_name] = notready_count
+
                         if not alert_state["k3s_node_alerts"].get(node_name):
-                            send_alert(f"🐳 Kubernetes Node '{node_name}' is NotReady!\nReason: {ready.get('reason')}")
+                            send_alert(f"🐳 Kubernetes Node '{node_name}' is NotReady!\nReason: {ready.get('reason') if ready else 'Unknown'}")
                             alert_state["k3s_node_alerts"][node_name] = True
+
+                        # Handle autonomous remediation
+                        remediation_enabled = load_setting("k3s_remediation", "0") == "1"
+                        if remediation_enabled and node_name not in alert_state["recovering_nodes"]:
+                            if notready_count == 19:
+                                send_alert(f"⚠️ Warning: Kubernetes Node '{node_name}' has been NotReady for 19 checks (9.5 minutes). Autonomous remediation will trigger in 30 seconds.")
+                            elif notready_count >= 20:
+                                alert_state["recovering_nodes"].add(node_name)
+                                threading.Thread(
+                                    target=run_k3s_node_remediation,
+                                    args=(node_name,),
+                                    daemon=True
+                                ).start()
                     else:
+                        alert_state["k3s_node_failures"][node_name] = 0
                         if alert_state["k3s_node_alerts"].get(node_name):
                             send_alert(f"✅ Kubernetes Node '{node_name}' has recovered and is Ready.")
                             alert_state["k3s_node_alerts"][node_name] = False
+
+            # Cleanup stale node state
+            with alert_lock:
+                for name in list(alert_state["k3s_node_failures"].keys()):
+                    if name not in active_nodes:
+                        alert_state["k3s_node_failures"].pop(name, None)
+                        alert_state["k3s_node_alerts"].pop(name, None)
+
     except Exception as e:
         logger.debug(f"K3s node health check failed: {e}")
 
@@ -254,6 +322,50 @@ def check_k3s_health():
                             alert_state["k3s_volume_alerts"][vol_name] = False
     except Exception as e:
         logger.debug(f"Longhorn volume health check failed: {e}")
+
+def check_storage_health():
+    """Check SMART status of Longhorn disks and heal if enabled."""
+    if load_setting("k3s_monitoring", "0") == "0":
+        return
+
+    # Find the master node to query Longhorn
+    master = next(
+        (n for n in AGENT_NODES if n.get('role') in ['server', 'master', 'control-plane']),
+        None
+    )
+    if not master:
+        return
+
+    with alert_lock:
+        failures = alert_state["node_failures"].get(master['name'], 0)
+    if failures > 0:
+        logger.debug(f"Skipping storage health checks: Master '{master['name']}' is currently failing pings.")
+        return
+
+    try:
+        heal_enabled = load_setting("storage_healing", "0") == "1"
+        cmd = [AGENT_KGG_BIN, "cluster", "storage-heal"]
+        if heal_enabled:
+            cmd.append("--heal")
+
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+
+        lines = res.stdout.split('\n')
+        for line in lines:
+            if "❌ Node:" in line:
+                send_alert(f"🚨 <b>SMART Check Failure</b>\n{line.strip()}")
+            elif "⚠️ Node:" in line:
+                import re
+                match = re.search(r"Node:\s*([^\s|]+)", line)
+                if match:
+                    node_name = match.group(1)
+                    warning_key = f"storage_warn_{node_name}"
+                    with alert_lock:
+                        if not alert_state.get(warning_key):
+                            send_alert(f"⚠️ <b>Storage Warning</b> on <code>{node_name}</code>\n{line.strip()}\nPlease install <code>smartctl</code>.")
+                            alert_state[warning_key] = True
+    except Exception as e:
+        logger.debug(f"Storage health check failed: {e}")
 
 # --- Database ---
 def init_db():
@@ -428,6 +540,7 @@ def brain_loop():
     """Main monitoring loop. Spawns health checks on their configured intervals."""
     last_node_check = time.time() - NODE_CHECK_INTERVAL + 5  # First check after 5s
     last_disk_check = time.time()
+    last_storage_check = time.time() - STORAGE_CHECK_INTERVAL + 15  # First check after 15s
 
     while True:
         now = time.time()
@@ -439,6 +552,10 @@ def brain_loop():
         if now - last_disk_check >= DISK_CHECK_INTERVAL:
             last_disk_check = now
             threading.Thread(target=check_disk_usage, daemon=True).start()
+
+        if now - last_storage_check >= STORAGE_CHECK_INTERVAL:
+            last_storage_check = now
+            threading.Thread(target=check_storage_health, daemon=True).start()
 
         time.sleep(1)
 

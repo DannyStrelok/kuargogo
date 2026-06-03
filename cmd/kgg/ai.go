@@ -241,7 +241,12 @@ var aiExplainCmd = &cobra.Command{
 			scanner := bufio.NewScanner(os.Stdin)
 			var sb strings.Builder
 			for scanner.Scan() {
-				sb.WriteString(scanner.Text() + "\n")
+				sb.WriteString(scanner.Text())
+				sb.WriteString("\n")
+			}
+			if err := scanner.Err(); err != nil {
+				fmt.Printf("Error reading input: %v\n", err)
+				os.Exit(1)
 			}
 			text = sb.String()
 		}

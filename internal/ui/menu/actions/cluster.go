@@ -263,3 +263,40 @@ func SiteDeploy(tags []string) tea.Cmd {
 		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
+
+// ClusterRemediate runs kgg cluster remediate for a target node via manager.go
+func ClusterRemediate(masterNode config.Node, targetNodeName string, tags []string) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
+
+			cfg := config.GetConfig()
+			keyPath, err := cfg.SSH.ExpandedKeyPath()
+			if err != nil {
+				ch <- fmt.Sprintf("❌ Error expanding key path: %v", err)
+				return
+			}
+
+			port := cfg.SSH.Port
+			if port == 0 {
+				port = 22
+			}
+
+			mgr := cluster.NewManager(masterNode.User, keyPath, port, config.IsDryRun())
+			mgr.Output = writer
+
+			_, _ = fmt.Fprintf(writer, "🛠️  Starting manual K3s Node Remediation for %s...\n\n", targetNodeName)
+			err = mgr.RemediateNode(&masterNode, targetNodeName, tags)
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ Remediation failed: %v", err)
+				return
+			}
+			ch <- fmt.Sprintf("\n✅ Remediation completed successfully for %s!\n", targetNodeName)
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
+	}
+}
+

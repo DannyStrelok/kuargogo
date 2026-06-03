@@ -29,3 +29,5 @@ Thumbs.db
 _tasks/*
 _tasks
 ./bin/*
+
+__pycache__

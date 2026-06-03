@@ -41,7 +41,8 @@ func Doctor() tea.Cmd {
 		output.WriteString("🩺 Cluster Health Report\n\n")
 		fmt.Fprintf(&output, "%-18s | %-15s | %-6s | %-6s | %-6s | %-6s | %s\n",
 			"Node", "IP", "CPU°C", "Disk", "RAM", "Load", "Uptime")
-		output.WriteString(strings.Repeat("-", 80) + "\n")
+		output.WriteString(strings.Repeat("-", 80))
+		output.WriteString("\n")
 
 		for _, m := range metrics {
 			fmt.Fprintf(&output, "%-18s | %-15s | %-6s | %-6s | %-6s | %-6s | %s\n",
