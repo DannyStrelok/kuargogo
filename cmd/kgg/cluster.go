@@ -12,9 +12,9 @@ import (
 )
 
 var clusterCmd = &cobra.Command{
-	Use:   "cluster [init|join|drain|reset]",
+	Use:   "cluster [init|join|drain|reset|remediate]",
 	Short: "Manage K3s cluster lifecycle",
-	Args:  cobra.ExactArgs(1), // init, join, drain, reset
+	Args:  cobra.ExactArgs(1), // init, join, drain, reset, remediate
 	Run: func(cmd *cobra.Command, args []string) {
 		action := args[0]
 		tagsFlag, _ := cmd.Flags().GetString("tags")
@@ -23,13 +23,29 @@ var clusterCmd = &cobra.Command{
 			tags = strings.Split(tagsFlag, ",")
 		}
 
-		// Find Master Node
+		// Find Master Node (Coordinator)
 		var masterNode *config.Node
 		cfg := config.GetConfig()
-		for _, n := range cfg.Nodes {
+		targetNodeName, _ := cmd.Flags().GetString("name")
+		for i := range cfg.Nodes {
+			n := &cfg.Nodes[i]
 			if n.Role == "master" || n.Role == "control-plane" {
-				masterNode = &n
+				// For drain or remediate, try to find a master that is not the target node being acted upon
+				if (action == "drain" || action == "remediate") && targetNodeName != "" && n.Name == targetNodeName {
+					continue
+				}
+				masterNode = n
 				break
+			}
+		}
+		if masterNode == nil {
+			// Fallback: If no other master found, just use the first available master
+			for i := range cfg.Nodes {
+				n := &cfg.Nodes[i]
+				if n.Role == "master" || n.Role == "control-plane" {
+					masterNode = n
+					break
+				}
 			}
 		}
 		if masterNode == nil {
@@ -46,8 +62,10 @@ var clusterCmd = &cobra.Command{
 			runClusterDrain(cmd, masterNode, tags)
 		case "reset":
 			runClusterReset(cmd, tags)
+		case "remediate":
+			runClusterRemediate(cmd, masterNode, tags)
 		default:
-			fmt.Println("Unknown action. Use: init, join, drain, reset")
+			fmt.Println("Unknown action. Use: init, join, drain, reset, remediate")
 		}
 	},
 }
@@ -231,6 +249,32 @@ func runClusterReset(cmd *cobra.Command, tags []string) {
 	}
 
 	fmt.Println("✅ K3s uninstalled successfully!")
+}
+
+func runClusterRemediate(cmd *cobra.Command, masterNode *config.Node, tags []string) {
+	targetNodeName, _ := cmd.Flags().GetString("name")
+	if targetNodeName == "" {
+		fmt.Println("Error: --name [NodeName] required for remediate")
+		os.Exit(1)
+	}
+
+	cfg := config.GetConfig()
+	keyPath, err := cfg.SSH.ExpandedKeyPath()
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	mgr := cluster.NewManager(masterNode.User, keyPath, cfg.SSH.Port, DryRun)
+	mgr.Output = os.Stdout
+
+	fmt.Printf("🛠️  Starting K3s Node Remediation for %s...\n", targetNodeName)
+	err = mgr.RemediateNode(masterNode, targetNodeName, tags)
+	if err != nil {
+		fmt.Printf("❌ Remediation failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("✅ Remediation completed successfully for %s!\n", targetNodeName)
 }
 
 func init() {

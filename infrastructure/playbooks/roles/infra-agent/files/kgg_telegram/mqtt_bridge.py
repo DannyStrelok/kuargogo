@@ -64,10 +64,19 @@ async def mqtt_alert_listener(ctx):
 
             try:
                 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-                kb = InlineKeyboardMarkup(inline_keyboard=[[
+                kb_list = [[
                     InlineKeyboardButton(text="🩺 Diagnose System", callback_data="infra_health"),
                     InlineKeyboardButton(text="🔕 Ignore", callback_data="alert_ignore")
-                ]])
+                ]]
+                import re
+                node_match = re.search(r"Kubernetes Node '([^']+)' is NotReady!", alert_msg)
+                if node_match:
+                    node_name = node_match.group(1)
+                    kb_list.insert(0, [
+                        InlineKeyboardButton(text="🛠️ Remediate Node", callback_data=f"k3s_remediate:{node_name}")
+                    ])
+
+                kb = InlineKeyboardMarkup(inline_keyboard=kb_list)
                 await ctx.bot.send_message(
                     chat_id=TG_ADMIN_ID,
                     text=f"{icon} <b>Proactive Alert:</b>\n{alert_msg}",

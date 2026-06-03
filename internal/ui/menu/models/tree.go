@@ -1113,6 +1113,54 @@ func buildClusterOperationsNode() MenuNode {
 					})
 				},
 			},
+			{
+				Title:       "Remediate Node 🛠️",
+				Description: "Drain, reset, and rejoin a worker node",
+				DynamicChildren: func() []MenuNode {
+					cfg := config.GetConfig()
+					nodes := []MenuNode{}
+					for _, n := range cfg.Nodes {
+						node := n
+						if node.Role == "infra-manager" {
+							continue
+						}
+
+						// For this target node, find a coordinator master node that is not the target node itself
+						var coordMaster *config.Node
+						for i := range cfg.Nodes {
+							if (cfg.Nodes[i].Role == "master" || cfg.Nodes[i].Role == "control-plane") && cfg.Nodes[i].Name != node.Name {
+								coordMaster = &cfg.Nodes[i]
+								break
+							}
+						}
+
+						// Fallback: If no other master node is found, use the first available master
+						if coordMaster == nil {
+							for i := range cfg.Nodes {
+								if cfg.Nodes[i].Role == "master" || cfg.Nodes[i].Role == "control-plane" {
+									coordMaster = &cfg.Nodes[i]
+									break
+								}
+							}
+						}
+
+						if coordMaster == nil {
+							continue
+						}
+
+						coordinator := *coordMaster
+
+						nodes = append(nodes, MenuNode{
+							Title:       node.Name,
+							Description: fmt.Sprintf("Drain, reset, and rejoin %s (via coordinator %s)", node.IP, coordinator.Name),
+							Action: func() tea.Cmd {
+								return engine.Push(NewOutputModel(actions.ClusterRemediate(coordinator, node.Name, nil)))
+							},
+						})
+					}
+					return nodes
+				},
+			},
 		},
 	}
 }

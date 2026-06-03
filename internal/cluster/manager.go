@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/DannyStrelok/kuargogo/internal/ansible"
+	"github.com/DannyStrelok/kuargogo/internal/config"
 	"github.com/DannyStrelok/kuargogo/internal/provision"
 )
 
@@ -93,4 +95,65 @@ func (m *Manager) GetLiveNodes(masterIP string) ([]string, error) {
 	}
 
 	return nodes, nil
+}
+
+// RemediateNode orchestrates draining, resetting, and rejoining a K3s worker node.
+func (m *Manager) RemediateNode(masterNode *config.Node, targetNodeName string, tags []string) error {
+	// 1. Find Target Node in configuration
+	var targetNode *config.Node
+	cfg := config.GetConfig()
+	for _, n := range cfg.Nodes {
+		if n.Name == targetNodeName {
+			targetNode = &n
+			break
+		}
+	}
+	if targetNode == nil {
+		return fmt.Errorf("node %s not found in configuration", targetNodeName)
+	}
+
+	// 2. Step 1: Drain target node from K3s cluster
+	_, _ = fmt.Fprintf(m.Output, "🔄 [Step 1/4] Draining node %s...\n", targetNodeName)
+	drainResult, err := ansible.RunK3sDrain(masterNode.Name, targetNodeName, m.DryRun, tags, m.Output)
+	if err != nil {
+		return fmt.Errorf("drain failed: %w", err)
+	}
+	if !drainResult.Success {
+		return fmt.Errorf("drain failed with exit status %d", drainResult.ExitCode)
+	}
+	_, _ = fmt.Fprintf(m.Output, "✅ Node %s drained.\n", targetNodeName)
+
+	// 3. Step 2: Reset K3s on target node
+	_, _ = fmt.Fprintf(m.Output, "🗑️  [Step 2/4] Resetting K3s on node %s...\n", targetNodeName)
+	resetResult, err := ansible.RunK3sReset(targetNodeName, m.DryRun, tags, m.Output)
+	if err != nil {
+		return fmt.Errorf("reset failed: %w", err)
+	}
+	if !resetResult.Success {
+		return fmt.Errorf("reset failed with exit status %d", resetResult.ExitCode)
+	}
+	_, _ = fmt.Fprintf(m.Output, "✅ K3s reset completed on %s.\n", targetNodeName)
+
+	// 4. Step 3: Get Join Token from Master
+	_, _ = fmt.Fprintf(m.Output, "🔑 [Step 3/4] Fetching join token from master %s...\n", masterNode.Name)
+	token, err := m.GetMasterToken(masterNode.IP)
+	if err != nil {
+		return fmt.Errorf("failed to fetch join token: %w", err)
+	}
+
+	// 5. Step 4: Rejoin target node to K3s cluster
+	role := "agent"
+	if targetNode.Role == "master" || targetNode.Role == "control-plane" || targetNode.Role == "server" {
+		role = "server"
+	}
+	_, _ = fmt.Fprintf(m.Output, "🔗 [Step 4/4] Rejoining node %s as %s...\n", targetNodeName, role)
+	joinResult, err := ansible.RunK3sJoin(targetNodeName, masterNode.IP, token, role, cfg.K3s.VIP, m.DryRun, tags, m.Output)
+	if err != nil {
+		return fmt.Errorf("join failed: %w", err)
+	}
+	if !joinResult.Success {
+		return fmt.Errorf("join failed with exit status %d", joinResult.ExitCode)
+	}
+
+	return nil
 }
