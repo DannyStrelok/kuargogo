@@ -48,7 +48,7 @@ Bootstrap clean nodes, manage SSH credentials, and run base OS automation.
 | `kgg bootstrap` | **Automated Pipeline**. Runs keygen, ssh-copy (TOFU), verifies keys, and provisions a clean node in one command. | `kgg bootstrap --node 192.168.1.101 --user debian` |
 | `kgg prep` | `[ANSIBLE]` Prepares host nodes for cluster integration (installs Docker/K3s dependencies, UFW rules). | `kgg prep --node lenovo-worker-1 --tags common,firewall` |
 | `kgg setup-gpu` | `[ANSIBLE]` Provisions Nvidia drivers, CUDA, and the NVIDIA Container Toolkit on nodes containing the `gpu: nvidia` flag. | `kgg setup-gpu --node lenovo-worker-1` |
-| `kgg mount-storage` | `[ANSIBLE]` Sets up secondary storage drives and automates persistent mount points in `/etc/fstab`. | `kgg mount-storage --node hp-master` |
+| `kgg storage mount` | `[ANSIBLE]` Sets up secondary storage drives and automates persistent mount points in `/etc/fstab`. | `kgg storage mount --node hp-master --disk /dev/sdb --mount /mnt/data` |
 | `kgg ssh` | Executes an arbitrary shell command on a target node using your secure cluster SSH key. | `kgg ssh lenovo-worker-1 "df -h"` |
 | `kgg site` | `[ANSIBLE]` **Full Orchestration Deployment**. Builds the entire cluster stack (Provisioning -> GPU -> K3s -> Storage). | `kgg site --tags k3s,init` |
 
@@ -61,9 +61,9 @@ Deploy and orchestrate your Kubernetes K3s node grid.
 | Command | Description | Example Syntax |
 | :--- | :--- | :--- |
 | `kgg cluster init` | `[ANSIBLE]` Configures the K3s control plane on the master node and extracts the secure cluster token. | `kgg cluster init --ha` |
-| `kgg cluster join` | `[ANSIBLE]` Joins a compute node to the existing cluster (supports `--role worker` or `--role master`). | `kgg cluster join --node lenovo-worker-1` |
-| `kgg cluster drain` | `[ANSIBLE]` Gracefully drains pods and schedules cordon mode on a worker node to prepare for physical maintenance. | `kgg cluster drain --node lenovo-worker-1` |
-| `kgg cluster reset` | `[ANSIBLE]` Completely uninstalls K3s, wipes container runtime data, and cleans system iptables/interfaces. | `kgg cluster reset --node lenovo-worker-1` |
+| `kgg cluster join` | `[ANSIBLE]` Joins a compute node to the existing cluster (supports `--role worker` or `--role master`). | `kgg cluster join --node 192.168.1.102` |
+| `kgg cluster drain` | `[ANSIBLE]` Gracefully drains pods and schedules cordon mode on a worker node to prepare for physical maintenance. | `kgg cluster drain --name lenovo-worker-1` |
+| `kgg cluster reset` | `[ANSIBLE]` Completely uninstalls K3s, wipes container runtime data, and cleans system iptables/interfaces. | `kgg cluster reset --name lenovo-worker-1` |
 
 ---
 
@@ -113,7 +113,7 @@ Manage local LLM models and core infrastructure services.
 | `kgg ai pull` | Instructs the Ollama host node to fetch a new LLM model from the central registry. | `kgg ai pull llama3` |
 | `kgg ai chat` | Launches an interactive, context-aware REPL terminal session with your local LLM engine. | `kgg ai chat -m mistral` |
 | `kgg ai generate-skill` | Exports a structured `skill.md` playbook summarizing your cluster configurations for external AI agents. | `kgg ai generate-skill` |
-| `kgg app deploy` | `[ANSIBLE]` Provisions predefined application charts and services (e.g. Immich, Home Assistant). | `kgg app deploy home-assistant` |
+| `kgg app deploy` | `[ANSIBLE]` Provisions predefined application charts and services (e.g. Immich, Home Assistant). | `kgg app deploy homeassistant` |
 | `kgg app backup` | `[ANSIBLE]` Manually triggers an instant S3 cluster backup with status reports. | `kgg app backup` |
 | `kgg storage` | `[ANSIBLE]` Checks dynamic volume status and manages Longhorn components. | `kgg storage status` |
 
@@ -155,7 +155,7 @@ Configure local service exposure to subdomains through Cloudflare Zero Trust Tun
 cloudflare:
   access_enabled: true
   access_emails:
-    - admin@chefclandestino.es
+    - admin@mydomain.com
   services:
     - name: "Grafana Monitoring"
       subdomain: "grafana"

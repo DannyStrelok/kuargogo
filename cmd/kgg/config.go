@@ -165,8 +165,8 @@ These credentials are stored in your kuargogo.yaml and used when deploying
 the Cloudflare Tunnel and Let's Encrypt SSL certificates.
 
 Examples:
-  kgg config set-cloudflare --domain chefclandestino.es --email user@example.com --api-token xxx --tunnel-token yyy
-  kgg config set-cloudflare --domain chefclandestino.es   # Set only the domain`,
+  kgg config set-cloudflare --domain mydomain.com --email user@example.com --api-token xxx --tunnel-token yyy
+  kgg config set-cloudflare --domain mydomain.com   # Set only the domain`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		email, _ := cmd.Flags().GetString("email")
 		apiToken, _ := cmd.Flags().GetString("api-token")

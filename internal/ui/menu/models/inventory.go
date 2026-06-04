@@ -142,7 +142,7 @@ func (m *InventoryModel) View() tea.View {
 		return tea.NewView("\n" + style.Render(msg))
 	}
 
-	// Build Professional Table using the theme's border palette
+	// Build Table using the theme's border palette
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderStyle(lipgloss.NewStyle().Foreground(m.theme.BorderColor())).

@@ -1,0 +1,86 @@
+.terminalContainer {
+  background: #08090c;
+  border: 1px solid var(--ifm-border-color);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  height: 320px;
+}
+
+.terminalHeader {
+  background: #12131a;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--ifm-border-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.terminalDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.dotRed { background: #ef4444; }
+.dotYellow { background: #eab308; }
+.dotGreen { background: #22c55e; }
+
+.terminalTitle {
+  margin-left: auto;
+  margin-right: auto;
+  font-size: 0.8rem;
+  color: #64748b;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.terminalBody {
+  padding: 1.2rem;
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  line-height: 1.6;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.terminalLine {
+  margin-bottom: 0.4rem;
+  white-space: pre-wrap;
+}
+
+.terminalPrompt {
+  color: var(--ifm-color-primary);
+  margin-right: 0.5rem;
+  font-weight: bold;
+}
+
+.inputText {
+  color: #f8fafc;
+}
+
+.outputText {
+  color: #94a3b8;
+}
+
+.successText {
+  color: #10b981;
+}
+
+.errorText {
+  color: #f43f5e;
+}
+
+.cursor {
+  color: var(--ifm-color-primary);
+  margin-left: 2px;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  from, to { color: transparent }
+  50% { color: var(--ifm-color-primary) }
+}

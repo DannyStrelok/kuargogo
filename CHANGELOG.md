@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Remote Commands**: New `kgg ssh <node> <command...>` to execute shell commands on nodes using cluster logic.
 - **Display Control**: New `kgg screen [on|off]` placeholder command for physical display interaction.
 - **GitOps Management**: Complete `kgg gitops` command suite to manage projects, applications, and private repository credentials from both CLI and TUI.
-- **Private Repository Support**: Integrated support for Personal Access Tokens (PAT) for private Git repositories, enabling secure ArgoCD deployments of professional projects.
+- **Private Repository Support**: Integrated support for Personal Access Tokens (PAT) for private Git repositories, enabling secure ArgoCD deployments of projects.
 - **Sealed Secrets**: Automatic deployment and native integration with **Bitnami Sealed Secrets** for end-to-end encrypted secret management within GitOps workflows.
 - **Bulk Power Control (TUI)**: New multi-select TUI menu for managing power states (Wake-on-LAN, Reboot, Shutdown) across multiple cluster nodes simultaneously.
 - **Documentation**: New comprehensive guide `internal/help/docs/06-gitops-and-secrets.md` explaining the full GitOps and Secrets workflow.
@@ -78,7 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Health Diagnostics**: Upgraded `kgg node health` and TUI checks to use a unified Prometheus API client (via SSH bridging) for instant PromQL-based metrics (CPU, RAM, Disk) instead of slow individual Bash scripts.
 - **Observability**: Added Grafana Tempo (Distributed Tracing) to the central `kgg ops observability` stack.
 - **Observability**: Enabled centralized, multi-tenant alerting architecture via `PrometheusRule` and `AlertmanagerConfig` CRDs.
-- **Documentation**: Developed comprehensive integration guide (`OBSERVABILITY.md`) for tenant projects like `clandestino`.
+- **Documentation**: Developed comprehensive integration guide (`OBSERVABILITY.md`) for tenant projects.
 - **Node Management**: New `kgg node edit` command to modify node attributes interactively or via flags.
 - **Node Management**: New `kgg node remove` command to delete nodes from configuration.
 - **TUI Integration**: Added `Edit Node` and `Remove Node` to the Node Management TUI menu.

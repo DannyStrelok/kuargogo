@@ -12,7 +12,7 @@ import (
 
 var networkCmd = &cobra.Command{
 	Use:   "network",
-	Short: "Manage the rack switch and network logic",
+	Short: "Manage switch and network logic",
 }
 
 var networkApplyCmd = &cobra.Command{

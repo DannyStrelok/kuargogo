@@ -67,7 +67,7 @@ Accede a la BIOS de **cada nodo de cómputo** antes de instalar el SO.
 > **Wake on LAN** y **Restore on AC Power Loss** son necesarios para que `kuargogo` pueda encender los nodos remotamente (`kgg pwr on`) y para que el clúster se recupere tras un corte de luz.
 
 > [!NOTE]
-> Para más detalles sobre configuración de BIOS, consulta también la sección de BIOS en [BUILD_RACK.md](../../../BUILD_RACK.md#-4-configuración-de-bios-nodos-de-cómputo).
+> Para más detalles sobre la instalación de Debian y configuración de BIOS, consulta la [Guía de Instalación de Debian](debian_install.md).
 
 ---
 

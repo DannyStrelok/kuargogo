@@ -1,6 +1,8 @@
+import TerminalShowcase from '@site/src/components/TerminalShowcase';
+
 # ⛵ Gestión de Proyectos con GitOps y Secretos
 
-Este documento detalla el flujo de trabajo para desplegar aplicaciones de forma declarativa en el clúster homelab de **The Rack** utilizando ArgoCD y manteniendo la seguridad de los datos sensibles.
+Este documento detalla el flujo de trabajo para desplegar aplicaciones de forma declarativa utilizando ArgoCD y manteniendo la seguridad de los datos sensibles.
 
 ## 1. Filosofía GitOps en kuargogo
 
@@ -36,7 +38,7 @@ Para solucionar esto, `kuargogo` instala automáticamente el controlador de **Se
 
 ### 🔐 Flujo de Trabajo con Sealed Secrets
 
-Este flujo te permite cifrar tus contraseñas localmente para que solo tu clúster de **The Rack** pueda descifrarlas.
+Este flujo te permite cifrar tus contraseñas localmente para que solo tu clúster pueda descifrarlas.
 
 #### Paso 1: Instalar `kubeseal` localmente
 Descarga el binario `kubeseal` en tu máquina de desarrollo (Admin PC):
@@ -67,6 +69,56 @@ kubeseal --fetch-cert \
 Ahora puedes borrar `secret-plain.yaml` de tu disco de forma segura. El archivo `secret-sealed.yaml` contiene solo datos cifrados y es **seguro subirlo a Git** (incluso en repositorios públicos).
 
 ArgoCD detectará el `SealedSecret`, lo desplegará, y el controlador en el clúster generará el `Secret` original automáticamente en memoria.
+
+<TerminalShowcase
+  title="local-dev@admin-pc:~"
+  steps={[
+    {
+      type: 'input',
+      text: 'kubeseal --fetch-cert --controller-name=sealed-secrets --controller-namespace=kube-system > pub-cert.pem'
+    },
+    {
+      type: 'output',
+      text: 'Retrieving public certificate from cluster...'
+    },
+    {
+      type: 'success',
+      text: '✓ Public certificate saved to pub-cert.pem'
+    },
+    {
+      type: 'input',
+      text: 'kubectl create secret generic my-db-pass --from-literal=password=MiPasswordMuySeguro --dry-run=client -o yaml > secret-plain.yaml'
+    },
+    {
+      type: 'output',
+      text: 'Creating secret generic my-db-pass (dry-run)...'
+    },
+    {
+      type: 'success',
+      text: '✓ Local unencrypted secret-plain.yaml created.'
+    },
+    {
+      type: 'input',
+      text: 'kubeseal --format=yaml --cert=pub-cert.pem < secret-plain.yaml > secret-sealed.yaml'
+    },
+    {
+      type: 'output',
+      text: 'Encrypting secret using public certificate...'
+    },
+    {
+      type: 'success',
+      text: '✓ SealedSecret secret-sealed.yaml generated successfully!'
+    },
+    {
+      type: 'input',
+      text: 'rm secret-plain.yaml'
+    },
+    {
+      type: 'success',
+      text: '✓ Removed plaintext secret file. Ready to commit secret-sealed.yaml.'
+    }
+  ]}
+/>
 
 ---
 
@@ -148,7 +200,7 @@ El flujo de "Promoción" funciona así:
 
 ## 7. Estrategia Multi-Entorno (Best Practices)
 
-Para proyectos profesionales o complejos, se recomienda seguir una estructura de **un repositorio de Ops con carpetas por entorno**.
+Para proyectos complejos, se recomienda seguir una estructura de **un repositorio de Ops con carpetas por entorno**.
 
 ### 📂 Estructura Recomendada del Repo de Ops
 ```text

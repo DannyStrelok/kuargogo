@@ -62,4 +62,4 @@ Cuando ejecutes `kgg infra init`, el sistema te solicitará estos valores si no 
 ---
 
 **Anterior** ← [Guía 4: Observabilidad](04-observability.md)  
-**Inicio** → [DEPLOYMENT_GUIDE.md](../../../docs/DEPLOYMENT_GUIDE.md)
+**Inicio** → [DEPLOYMENT_GUIDE.md](/docs/DEPLOYMENT_GUIDE)

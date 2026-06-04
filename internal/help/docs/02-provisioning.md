@@ -1,7 +1,7 @@
 # 🛠️ Guía 2: Provisioning con kuargogo
 
 > [!TIP]
-> **Hoja de Ruta**: Esta guía corresponde a la **Fase 1 (Foundation)** de la [Hoja de Ruta Profesional](00-workflow-roadmap.md). Asegúrate de seguir el orden estratégico para evitar errores de almacenamiento.
+> **Hoja de Ruta**: Esta guía corresponde a la **Fase 1 (Foundation)** de la [Hoja de Ruta](00-workflow-roadmap.md). Asegúrate de seguir el orden estratégico para evitar errores de almacenamiento.
 
 > **Tiempo estimado**: 30-45 minutos  
 > **Prerequisito**: [Guía 1: Preparación del Hardware](01-hardware-preparation.md) completada
@@ -35,7 +35,7 @@ go build -o kgg.exe ./cmd/kgg
 ./kgg.exe help
 ```
 
-Deberías ver la lista de comandos disponibles. Para referencia completa, consulta [COMMANDS.md](../../../docs/COMMANDS.md).
+Deberías ver la lista de comandos disponibles. Para referencia completa, consulta la [Referencia de Comandos](/docs/COMMANDS).
 
 > [!IMPORTANT]
 > Los comandos de provisioning y cluster (`kgg prep`, `kgg cluster init`, `kgg site`, etc.) requieren dependencias en tu PC Administrador (Ansible, K9s). Puedes instalarlas de forma automática ejecutando:
@@ -238,7 +238,7 @@ Esto automatiza:
 Si tus nodos tienen un **disco secundario** (NVMe, SSD SATA) que quieres usar para almacenamiento distribuido (Longhorn):
 
 ```bash
-./kgg.exe mount-storage
+./kgg.exe storage mount --node hp-master --disk /dev/sdb --mount /mnt/data
 ```
 
 Deberás indicar:
@@ -272,7 +272,7 @@ Se puede filtrar por fases con `--tags`:
 ```
 
 > [!WARNING]
-> Si tienes discos secundarios para Longhorn, ejecuta `kgg mount-storage` **antes** de `kgg site`.
+> Si tienes discos secundarios para Longhorn, ejecuta `kgg storage mount` **antes** de `kgg site`.
 
 ---
 
@@ -289,7 +289,7 @@ Antes de continuar con la [Guía 3: Clúster y Servicios](03-cluster-and-service
 
 ---
 
-## ❓ Solución de Problemas
+## ❓ Solución de Problemas {#solucion-de-problemas}
 
 | Problema | Solución |
 |:---|:---|
@@ -298,7 +298,7 @@ Antes de continuar con la [Guía 3: Clúster y Servicios](03-cluster-and-service
 | `Pre-flight check failed` | Ejecuta `kgg node health <IP>` para diagnosticar la conectividad SSH. |
 | `Host key verification failed` | Usa `kgg ssh-copy` que acepta automáticamente el host key (TOFU). |
 
-Para más información, consulta el [README.md](../../../README.md#-faq--troubleshooting).
+Para más información, consulta la sección de [Solución de Problemas](#solucion-de-problemas).
 
 ---
 

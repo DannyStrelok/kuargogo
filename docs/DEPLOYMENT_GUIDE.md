@@ -29,13 +29,13 @@ flowchart TD
 
 | Phase | Target Module Guide | Focus Objectives | Est. Duration |
 | :--- | :--- | :--- | :--- |
-| **Phase 1** | 🖥️ [01. Hardware & OS Setup](file:///e:/Development/kuargogo/internal/help/docs/01-hardware-preparation.md) | BIOS configurations, static IP definitions, and vanilla Debian server installation. | 1 - 2 Hours |
-| **Phase 2** | 🛠️ [02. CLI & Node Bootstrap](file:///e:/Development/kuargogo/internal/help/docs/02-provisioning.md) | Initializing `kuargogo.yaml`, secure SSH keygen/copies, and node agent provisioning. | 30 - 45 Mins |
-| **Phase 3** | ☸️ [03. Cluster & Storage Deploy](file:///e:/Development/kuargogo/internal/help/docs/03-cluster-and-services.md) | Initializing K3s Master, worker joins, Longhorn volumes, and CUDA Ollama setups. | 20 - 30 Mins |
-| **Phase 4** | 📊 [04. Observability Stack](file:///e:/Development/kuargogo/internal/help/docs/04-observability.md) | Deploying Grafana LGTM engines and provisioning metrics telemetry collection. | 15 - 20 Mins |
-| **Phase 4b**| 🤖 [05. Telegram Bot Whitelist](file:///e:/Development/kuargogo/internal/help/docs/05-telegram-setup.md) | Connecting and hardening "The Voice" bot telegram notifications for the Pi. | 10 Mins |
-| **Phase 5** | ⛵ [06. GitOps & Secrets Management](file:///e:/Development/kuargogo/internal/help/docs/06-gitops-and-secrets.md) | Deploying ArgoCD projects, git repositories, and pipeline secrets. | 20 Mins |
-| **Phase 5b**| 🌐 [07. Cloudflare Zero Trust Ingress](file:///e:/Development/kuargogo/internal/help/docs/07-cloudflare-zero-trust.md) | Configuring secure outbound tunnels and OTP application security policies. | 15 Mins |
+| **Phase 1** | 🖥️ [01. Hardware & OS Setup](/guides/hardware-preparation) | BIOS configurations, static IP definitions, and vanilla Debian server installation. | 1 - 2 Hours |
+| **Phase 2** | 🛠️ [02. CLI & Node Bootstrap](/guides/provisioning) | Initializing `kuargogo.yaml`, secure SSH keygen/copies, and node agent provisioning. | 30 - 45 Mins |
+| **Phase 3** | ☸️ [03. Cluster & Storage Deploy](/guides/cluster-and-services) | Initializing K3s Master, worker joins, Longhorn volumes, and CUDA Ollama setups. | 20 - 30 Mins |
+| **Phase 4** | 📊 [04. Observability Stack](/guides/observability) | Deploying Grafana LGTM engines and provisioning metrics telemetry collection. | 15 - 20 Mins |
+| **Phase 4b**| 🤖 [05. Telegram Bot Whitelist](/guides/telegram-setup) | Connecting and hardening "The Voice" bot telegram notifications for the Pi. | 10 Mins |
+| **Phase 5** | ⛵ [06. GitOps & Secrets Management](/guides/gitops-and-secrets) | Deploying ArgoCD projects, git repositories, and pipeline secrets. | 20 Mins |
+| **Phase 5b**| 🌐 [07. Cloudflare Zero Trust Ingress](/guides/cloudflare-zero-trust) | Configuring secure outbound tunnels and OTP application security policies. | 15 Mins |
 
 ---
 
@@ -48,9 +48,9 @@ kgg site
 ```
 
 > [!WARNING]
-> If your workers contain dedicated storage pools configured for Longhorn, ensure you mount them via `kgg mount-storage` **before** running `kgg site` to ensure paths bind correctly.
+> If your workers contain dedicated storage pools configured for Longhorn, ensure you mount them via `kgg storage mount` **before** running `kgg site` to ensure paths bind correctly.
 
-For in-depth parameters on fast-path deployments, review the [Express Deploy Reference](file:///e:/Development/kuargogo/internal/help/docs/02-provisioning.md#-atajo-despliegue-express-kgg-site).
+For in-depth parameters on fast-path deployments, review the [Express Deploy Reference](/guides/provisioning#-atajo-despliegue-express-kgg-site).
 
 ---
 
@@ -72,4 +72,4 @@ To research specific operations, command arguments, or telemetry architectures, 
 
 *   📖 **[COMMANDS.md](COMMANDS.md)**: Full syntax definitions and command examples for the CLI.
 *   🧠 **[ARCHITECTURE.md](ARCHITECTURE.md)**: Software layer charts, telemetry flows, and self-healing systems.
-*   🚀 **[README.md](../README.md)**: Main landing page, Quick Start references, and compilation guides.
+*   🚀 **[README.md](https://github.com/DannyStrelok/kuargogo/blob/main/README.md)**: Main landing page, Quick Start references, and compilation guides.

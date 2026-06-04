@@ -4,7 +4,7 @@ import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 
 function HomepageHeader() {
-  const {siteConfig} = useDocusaurusContext();
+  const { siteConfig } = useDocusaurusContext();
   return (
     <div className="hero-banner">
       <div className="container">
@@ -37,31 +37,31 @@ function HomepageHeader() {
             <div className="terminal-line">
               <span className="terminal-prompt">$</span> kgg init
             </div>
-            <div className="terminal-line" style={{color: '#94a3b8'}}>
+            <div className="terminal-line" style={{ color: '#94a3b8' }}>
               ⚙️ Inicializando configurador interativo...
             </div>
-            <div className="terminal-line" style={{color: '#10b981'}}>
+            <div className="terminal-line" style={{ color: '#10b981' }}>
               ✔ Perfil de red y credenciales de host detectadas.
             </div>
-            <div className="terminal-line" style={{color: '#10b981'}}>
+            <div className="terminal-line" style={{ color: '#10b981' }}>
               ✔ Archivo 'kuargogo.yaml' generado con 3 nodos activos.
             </div>
             <div className="terminal-line">
               <span className="terminal-prompt">$</span> kgg site --tags k3s
             </div>
-            <div className="terminal-line" style={{color: '#60a5fa'}}>
+            <div className="terminal-line" style={{ color: '#60a5fa' }}>
               [ANSIBLE] Ejecutando rol: k3s-prep ...
             </div>
-            <div className="terminal-line" style={{color: '#60a5fa'}}>
+            <div className="terminal-line" style={{ color: '#60a5fa' }}>
               [ANSIBLE] Inicializando K3s Master en hp-master (192.168.1.101) ...
             </div>
-            <div className="terminal-line" style={{color: '#34d399'}}>
+            <div className="terminal-line" style={{ color: '#34d399' }}>
               ✔ ¡Cluster K3s desplegado correctamente!
             </div>
             <div className="terminal-line">
               <span className="terminal-prompt">$</span> <span className="terminal-success">kgg doctor</span>
             </div>
-            <div className="terminal-line" style={{color: '#34d399'}}>
+            <div className="terminal-line" style={{ color: '#34d399' }}>
               ✔ Nodos: 3/3 Online | Storage: OK | AI: Active (Ollama)
             </div>
           </div>
@@ -72,16 +72,16 @@ function HomepageHeader() {
 }
 
 export default function Home() {
-  const {siteConfig} = useDocusaurusContext();
+  const { siteConfig } = useDocusaurusContext();
   return (
     <Layout
       title={`${siteConfig.title} - Homelab Command Center`}
-      description="Centro de mando CLI/TUI profesional para homelabs y clústeres K3s en Raspberry Pi y x86.">
+      description="Centro de mando CLI/TUI para homelabs y clústeres K3s en Raspberry Pi y x86.">
       <HomepageHeader />
       <main>
         <section className="features-section">
           <div className="features-grid">
-            
+
             <div className="feature-card">
               <span className="feature-icon">⚡</span>
               <h3 className="feature-title">Aprovisionamiento Zero-Touch</h3>
