@@ -1,12 +1,12 @@
 # 📊 Guía 4: Observabilidad y Métricas (Multi-Proyecto)
 
 > [!TIP]
-> **Hoja de Ruta**: Esta guía corresponde a la **Fase 3 (Ecosistema)** de la [Hoja de Ruta Profesional](00-workflow-roadmap.md).
+> **Hoja de Ruta**: Esta guía corresponde a la **Fase 3 (Ecosistema)** de la [Hoja de Ruta](00-workflow-roadmap.md).
 
 > **Tiempo estimado**: 10 minutos
 > **Prerequisito**: [Guía 3: Clúster y Servicios](03-cluster-and-services.md) completada
 
-Con tu clúster K3s funcionando, el siguiente paso crítico en cualquier entorno profesional es tener **visibilidad total**. `kuargogo` facilita el despliegue de un stack completo de observabilidad basado en **LGTM** (Loki, Grafana, Tempo, Mimir/Prometheus) configurado automáticamente para entornos multi-proyecto.
+Con tu clúster K3s funcionando, el siguiente paso crítico en cualquier entorno es tener **visibilidad total**. `kuargogo` facilita el despliegue de un stack completo de observabilidad basado en **LGTM** (Loki, Grafana, Tempo, Mimir/Prometheus) configurado automáticamente para entornos multi-proyecto.
 
 ---
 
@@ -75,7 +75,7 @@ Si tu aplicación utiliza librerías OTel (OpenTelemetry) u OTLP, puedes enviar 
 - **Endpoint gRPC**: `http://tempo.observability.svc.cluster.local:4317`
 - **Endpoint HTTP**: `http://tempo.observability.svc.cluster.local:4318/v1/traces`
 
-Por ejemplo, si utilizas un **OTel Collector** en tu proyecto (como en `clandestino`), puedes configurarlo como exportador:
+Por ejemplo, si utilizas un **OTel Collector** en tu proyecto, puedes configurarlo como exportador:
 
 ```yaml
 exporters:
@@ -116,7 +116,7 @@ kubectl port-forward svc/kube-prometheus-stack-grafana -n observability 3000:80
 
 Como parte del **Roadmap v0.6.0+**, se espera que los comandos propios del `kuargogo` (por ejemplo, `kgg node health`) consulten directamente la API de este Prometheus central en lugar de realizar conexiones SSH individuales, unificando los flujos de alerta a través del *Brain* (Raspberry Pi).
 
-Para más detalles, visita o contribuye en el **[ROADMAP.md](../../../docs/ROADMAP.md)**.
+Para más detalles, visita o contribuye en el **[ROADMAP.md](/docs/ROADMAP)**.
 
 ---
 

@@ -1,7 +1,7 @@
 # ☸️ Guía 3: Clúster Kubernetes y Servicios
 
 > [!TIP]
-> **Hoja de Ruta**: Esta guía corresponde a la **Fase 2 (Bootstrap)** y **Fase 3 (Ecosistema)** de la [Hoja de Ruta Profesional](00-workflow-roadmap.md).
+> **Hoja de Ruta**: Esta guía corresponde a la **Fase 2 (Bootstrap)** y **Fase 3 (Ecosistema)** de la [Hoja de Ruta](00-workflow-roadmap.md).
 
 > **Tiempo estimado**: 20-30 minutos  
 > **Prerequisito**: [Guía 2: Provisioning](02-provisioning.md) completada
@@ -86,7 +86,7 @@ Si el nodo tiene la etiqueta `gpu: nvidia`, recibirás un recordatorio:
 ### 2.1. Estado general
 
 ```bash
-./kgg.exe status
+./kgg.exe node status
 ```
 
 Muestra la salud general del sistema: estado de K3s y estado del hardware.
@@ -197,7 +197,6 @@ Comandos útiles para el día a día:
 
 | Acción | Comando |
 |:---|:---|
-| Identificar un nodo físicamente (LED) | `kgg locate hp-prodesk` |
 | Encender/apagar nodos remotamente | `kgg pwr on lenovo-1` / `kgg pwr off lenovo-1` |
 | Backup del sistema | `kgg app backup` |
 | Drenar nodo para mantenimiento | `kgg cluster drain --name lenovo-1` |
@@ -209,7 +208,7 @@ Comandos útiles para el día a día:
 
 ## 🎉 ¡Felicidades!
 
-Tienes un **Homelab Profesional** con:
+Tienes un **Homelab** con:
 - ✅ Clúster Kubernetes en Alta Disponibilidad (3 servers)
 - ✅ Almacenamiento distribuido con Longhorn
 - ✅ Gestión remota completa via `kuargogo`
@@ -220,13 +219,13 @@ Tienes un **Homelab Profesional** con:
 
 | Documento | Descripción |
 |:---|:---|
-| [COMMANDS.md](../../../docs/COMMANDS.md) | Referencia completa de todos los comandos |
-| [ARCHITECTURE.md](../../../docs/ARCHITECTURE.md) | Arquitectura del sistema |
+| [COMMANDS.md](/docs/COMMANDS) | Referencia completa de todos los comandos |
+| [ARCHITECTURE.md](/docs/ARCHITECTURE) | Arquitectura del sistema |
 
 
 ---
 
-## ❓ Solución de Problemas
+## ❓ Solución de Problemas {#solucion-de-problemas}
 
 | Problema | Solución |
 |:---|:---|
@@ -236,9 +235,9 @@ Tienes un **Homelab Profesional** con:
 | `INSTALL_K3S_EXEC` errors | Verifica que swap está desactivado (`free -h`) y que los kernel modules están cargados (`lsmod | grep br_netfilter`). |
 | Agente / MQTT no responde | Comprueba que Mosquitto está corriendo en la RPi: `sudo systemctl status mosquitto`. Verifica la config en `kuargogo.yaml`. |
 
-Para más información, consulta el [README.md](../../../README.md#-faq--troubleshooting) y [COMMANDS.md](../../../docs/COMMANDS.md).
+Para más información, consulta la sección de [Solución de Problemas](#solucion-de-problemas) y la [Referencia de Comandos](/docs/COMMANDS).
 
 ---
 
 **Anterior** ← [Guía 2: Provisioning](02-provisioning.md)  
-**Inicio** → [DEPLOYMENT_GUIDE.md](../../../docs/DEPLOYMENT_GUIDE.md)
+**Inicio** → [DEPLOYMENT_GUIDE.md](/docs/DEPLOYMENT_GUIDE)

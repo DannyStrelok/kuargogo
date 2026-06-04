@@ -8,7 +8,7 @@
   <a href="https://www.gnu.org/licenses/agpl-3.0"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"></a>
 </p>
 
-**Kuargogo (`kgg`)** is a professional, open-source command-center CLI and TUI designed for modern homelabs. Built in Go, Kuargogo bridges the gap between infrastructure management, container orchestration, hardware telemetry, and local AI capabilities. 
+**Kuargogo (`kgg`)** is a open-source command-center CLI and TUI designed for modern homelabs. Built in Go, Kuargogo bridges the gap between infrastructure management, container orchestration, hardware telemetry, and local AI capabilities. 
 
 Unlike generic management tools, Kuargogo embraces a **Dual-Plane Architecture** that separates the lightweight, always-on **Control Plane** (run on a Raspberry Pi bastion) from the heavy **Data Plane** (your compute and K3s cluster). It provides automated provisioning, real-time alerting, local LLM integrations, and a sleek interactive Terminal User Interface (TUI) to control your entire rack.
 

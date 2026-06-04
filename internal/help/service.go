@@ -3,6 +3,7 @@ package help
 import (
 	"embed"
 	"fmt"
+	"regexp"
 )
 
 //go:embed docs/*.md
@@ -27,7 +28,7 @@ func NewService() *Service {
 		topics: []Topic{
 			{
 				ID:          "00-workflow-roadmap",
-				Title:       "🚀 Professional Workflow Roadmap",
+				Title:       "🚀 Workflow Roadmap",
 				Description: "Master strategy for building and maintaining your homelab",
 				Filename:    "docs/00-workflow-roadmap.md",
 			},
@@ -64,13 +65,13 @@ func NewService() *Service {
 			{
 				ID:          "05-telegram",
 				Title:       "🤖 Telegram Bot Setup",
-				Description: "Guide for configuring the rack monitoring and control bot",
+				Description: "Guide for configuring the homelab monitoring and control bot",
 				Filename:    "docs/05-telegram-setup.md",
 			},
 			{
 				ID:          "06-gitops",
 				Title:       "⛵ GitOps and Secrets",
-				Description: "Professional declarative deployment workflow",
+				Description: "Declarative deployment workflow",
 				Filename:    "docs/06-gitops-and-secrets.md",
 			},
 			{
@@ -106,6 +107,17 @@ func (s *Service) GetTopics() []Topic {
 	return s.topics
 }
 
+var (
+	importRegex           = regexp.MustCompile(`(?m)^import\s+.*$`)
+	terminalShowcaseRegex = regexp.MustCompile(`(?s)<TerminalShowcase\b.*?\/>`)
+)
+
+func cleanMDX(content string) string {
+	content = importRegex.ReplaceAllString(content, "")
+	content = terminalShowcaseRegex.ReplaceAllString(content, "")
+	return content
+}
+
 // GetContent returns the content of a topic by its ID.
 func (s *Service) GetContent(id string) (string, error) {
 	var filename string
@@ -125,5 +137,5 @@ func (s *Service) GetContent(id string) (string, error) {
 		return "", fmt.Errorf("failed to read content for %s: %w", id, err)
 	}
 
-	return string(content), nil
+	return cleanMDX(string(content)), nil
 }

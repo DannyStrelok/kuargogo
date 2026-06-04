@@ -40,7 +40,7 @@ func (m *MenuModel) MouseMode() tea.MouseMode {
 func (m *MenuModel) ApplyTheme(t engine.Theme) {
 	m.theme = t
 
-	// Update list delegate styles for a professional 'terminal moderna' look
+	// Update list delegate styles for a 'terminal moderna' look
 	d := list.NewDefaultDelegate()
 
 	// Use Accent color for selected items instead of default pink

@@ -1,6 +1,6 @@
 # 🗺️ Project Roadmap
 
-This document outlines the development path for the **Kuargogo (`kuargogo`)** project, focusing on moving from the current state (v0.5.5) to a professional, resilient `v1.0.0` release.
+This document outlines the development path for the **Kuargogo (`kuargogo`)** project, focusing on moving from the current state (v0.5.5) to a resilient `v1.0.0` release.
 
 ---
 
@@ -18,7 +18,7 @@ This document outlines the development path for the **Kuargogo (`kuargogo`)** pr
 ## 🚀 Upcoming Releases
 
 ### v0.6.0 - The "Observability & Alerting" Update
-*Focus on knowing exactly what is happening in the rack.*
+*Focus on knowing exactly what is happening in your homelab.*
 - [x] **Cluster-Wide Observability**: Deployed multi-tenant LGTM stack (Prometheus, Loki, Grafana, Tempo) via Ansible.
 - [x] **Multi-tenant Alerting**: Integrated AlertManager with `PrometheusRule` and `AlertmanagerConfig` CRDs for tenant isolation.
 - [x] **Advanced Health Checks**: Integrated Prometheus PromQL API queries into `kgg node health` and TUI for real-time, low-overhead stats. 

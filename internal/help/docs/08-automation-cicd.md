@@ -1,6 +1,8 @@
+import TerminalShowcase from '@site/src/components/TerminalShowcase';
+
 # 🤖 Automatización CI/CD con GitHub Actions
 
-Este documento explica cómo configurar tus repositorios privados para que los servicios se actualicen automáticamente en tu clúster de **The Rack** cada vez que subes código nuevo.
+Este documento explica cómo configurar tus repositorios privados para que los servicios se actualicen automáticamente en tu clúster cada vez que subes código nuevo.
 
 ---
 
@@ -96,7 +98,7 @@ Al hacer que GitHub Action **escriba** el nuevo tag (`mi-app:sha-12345`) en el Y
 Asegúrate de que la aplicación esté añadida a tu configuración local para que el clúster la gestione:
 
 ```bash
-kgg gitops app add --name clandestino-v1 --repo https://github.com/tu-usuario/repo.git --path k8s
+kgg gitops app add projectname projectname-v1 https://github.com/tu-usuario/repo.git k8s
 ```
 
 > [!TIP]
@@ -106,7 +108,7 @@ kgg gitops app add --name clandestino-v1 --repo https://github.com/tu-usuario/re
 
 ## 6. Enterprise GitOps: Promociones Avanzadas con Kargo
 
-Cuando gestionas entornos profesionales (como `dev`, `staging` y `prod`), la actualización automática directa vía writeback de CI/CD puede ser arriesgada para entornos productivos. Aquí es donde entra **Kargo**, el motor de promociones GitOps empresarial de última generación integrado en **The Rack** y completamente gestionado por `kuargogo`.
+Cuando gestionas entornos (como `dev`, `staging` y `prod`), la actualización automática directa vía writeback de CI/CD puede ser arriesgada para entornos productivos. Aquí es donde entra **Kargo**, el motor de promociones GitOps empresarial de última generación integrado y completamente gestionado por `kuargogo`.
 
 Kargo empaqueta tus artefactos (imágenes de contenedor, commits de Git, configuraciones, etc.) en paquetes inmutables llamados **Freight** (Carga) y permite promoverlos de forma controlada, secuencial y segura a través de tus diferentes entornos.
 
@@ -126,11 +128,11 @@ Para dominar el flujo GitOps corporativo, es fundamental comprender cómo Kargo 
 
 ### 🔒 Integración Completa: Repositorios Privados y la Relación entre ArgoCD, Kargo y kuargogo
 
-Cuando utilizas un repositorio privado de GitOps como **`https://github.com/DannyStrelok/clandestino_ops.git`**, la seguridad y la sincronización de credenciales se vuelven primordiales. `kuargogo` simplifica esta gestión declarando las credenciales de forma segura y distribuyéndolas automáticamente a los controladores del clúster.
+Cuando utilizas un repositorio privado de GitOps, la seguridad y la sincronización de credenciales se vuelven primordiales. `kuargogo` simplifica esta gestión declarando las credenciales de forma segura y distribuyéndolas automáticamente a los controladores del clúster.
 
 #### 🔄 Diagrama de Flujo y Relación de Componentes
 
-El siguiente diagrama detalla cómo interactúan tu código fuente, las imágenes de contenedor, el repositorio privado de configuración `clandestino_ops` y los controladores en tu clúster de **The Rack**:
+El siguiente diagrama detalla cómo interactúan tu código fuente, las imágenes de contenedor, el repositorio privado de configuración y los controladores en tu clúster:
 
 ```mermaid
 graph TD
@@ -151,10 +153,10 @@ graph TD
     end
 
     subgraph "3. Repositorio GitOps Privado"
-        OpsRepo[(Private Repo: clandestino_ops)]
+        OpsRepo[(Private Repo: ProjectName-ops)]
     end
 
-    subgraph "4. Clúster (The Rack)"
+    subgraph "4. Clúster"
         Kargo[Controlador Kargo]
         ArgoCD[Controlador ArgoCD]
         AppPods[Pods en Ejecución: auth-service]
@@ -178,23 +180,23 @@ graph TD
 #### 🛠️ ¿Cómo se relaciona cada componente?
 
 1. **El Repositorio de Código (`auth-service`)**: Donde se desarrolla la lógica de negocio. Al hacer push, el CI/CD (GitHub Actions) construye la imagen y la publica en un registro OCI (ej. `ghcr.io`). **No contiene archivos de despliegue de Kubernetes.**
-2. **El Repositorio de GitOps Privado (`clandestino_ops`)**: Es el cerebro de la infraestructura. Contiene los manifiestos de Kubernetes estructurados por entornos (`dev`, `staging`, `prod`). **Es privado por seguridad para no exponer tu configuración interna.**
+2. **El Repositorio de GitOps Privado (`ProjectName-ops`)**: Es el cerebro de la infraestructura. Contiene los manifiestos de Kubernetes estructurados por entornos (`dev`, `staging`, `prod`). **Es privado por seguridad para no exponer tu configuración interna.**
 3. **El Gestor de Credenciales (`kuargogo`)**: Centraliza los secretos. Al configurar tus credenciales de GitHub en `kuargogo.yaml`, al ejecutar `kgg gitops sync` o `kgg kargo sync`, la CLI genera de forma automática:
    - Secretos tipo `helm.sh/release.v1` o de configuración Git en el namespace `argocd` (para que ArgoCD pueda leer tu repo privado).
    - Secretos de repositorio en el namespace `kargo` (para que Kargo pueda clonar, modificar archivos de manifiestos y realizar *git push* automáticos con la nueva versión promovida).
-4. **El Lector de Manifiestos (ArgoCD)**: Monitoriza en modo **solo lectura** el repositorio privado `clandestino_ops` y se asegura de que el estado real del clúster de Kubernetes coincida exactamente con lo declarado en Git.
-5. **El Promotor de Versiones (Kargo)**: Actúa como un **escritor automatizado**. Al solicitar una promoción (ej. `kgg kargo promote dev`), Kargo clona `clandestino_ops` usando la credencial autorizada, cambia la imagen en la carpeta correspondiente (`apps/auth-service/environments/dev/kustomization.yaml`), crea un commit de auditoría y lo sube de vuelta a GitHub. Al instante, ArgoCD detecta la modificación y actualiza los Pods en el clúster.
+4. **El Lector de Manifiestos (ArgoCD)**: Monitoriza en modo **solo lectura** el repositorio privado y se asegura de que el estado real del clúster de Kubernetes coincida exactamente con lo declarado en Git.
+5. **El Promotor de Versiones (Kargo)**: Actúa como un **escritor automatizado**. Al solicitar una promoción (ej. `kgg kargo promote dev`), Kargo clona `ProjectName-ops` usando la credencial autorizada, cambia la imagen en la carpeta correspondiente (`apps/auth-service/environments/dev/kustomization.yaml`), crea un commit de auditoría y lo sube de vuelta a GitHub. Al instante, ArgoCD detecta la modificación y actualiza los Pods en el clúster.
 
 #### 🔑 Configuración Práctica de Credenciales en `kuargogo.yaml`
 
-Para habilitar este flujo con `clandestino_ops`, declara tu repositorio de GitOps en el bloque de credenciales de la siguiente manera:
+Para habilitar este flujo con `ProjectName-ops`, declara tu repositorio de GitOps en el bloque de credenciales de la siguiente manera:
 
 ```yaml
 gitops:
   # 1. Configuración de Acceso Seguro a Repositorio Privado
   credentials:
-    - url: https://github.com/DannyStrelok/clandestino_ops.git
-      username: DannyStrelok
+    - url: https://github.com/tu-usuario/ProjectName-ops.git
+      username: tu-usuario
       password: "ghp_tuPersonalAccessTokenDeGitHubAqui" # Al guardar el archivo, kuargogo lo encriptará automáticamente
       
   # 2. Configuración de Pipelines de Kargo apuntando al repositorio privado
@@ -205,7 +207,7 @@ gitops:
       warehouse:
         name: auth-warehouse
         repo: ghcr.io/gridsovereign/auth-service
-        path: https://github.com/DannyStrelok/clandestino_ops.git  # Tu repo privado
+        path: https://github.com/tu-usuario/ProjectName-ops.git  # Tu repo privado
         image_selection_strategy: SemVer
         semver: "^0.0.1"
       stages:
@@ -232,7 +234,7 @@ Además de los pipelines y las credenciales de repositorios, `kuargogo` te permi
 
 #### ¿Para qué sirve `kargo_engine`?
 
-Cuando instalas o actualizas el clúster con Ansible (ej. ejecutando los playbooks de **The Rack** a través de `kgg`), el controlador de Kargo y su interfaz gráfica (Kargo Dashboard) requieren credenciales y claves de seguridad globales. El bloque `kargo_engine` encapsula esta información sensible para la infraestructura:
+Cuando instalas o actualizas el clúster con Ansible (ej. ejecutando los playbooks de **Kuargogo** a través de `kgg`), el controlador de Kargo y su interfaz gráfica (Kargo Dashboard) requieren credenciales y claves de seguridad globales. El bloque `kargo_engine` encapsula esta información sensible para la infraestructura:
 
 * **`admin_password` (Contraseña de Administrador)**: Define la clave para el usuario administrador por defecto (`admin`). Durante el despliegue con Ansible, `kuargogo` encripta y transmite este valor para inicializar de forma segura la API.
 * **`admin_password_hash` (Hash Bcrypt de la Contraseña)**: Kargo Dashboard requiere el hash Bcrypt de la contraseña para validar los inicios de sesión web. Si especificas este hash, Ansible configurará directamente el acceso seguro.
@@ -252,8 +254,8 @@ gitops:
     
   # 2. Configuración de Acceso Seguro a Repositorio Privado
   credentials:
-    - url: https://github.com/DannyStrelok/clandestino_ops.git
-      username: DannyStrelok
+    - url: https://github.com/tu-usuario/ProjectName-ops.git
+      username: tu-usuario
       password: "ghp_tuPersonalAccessTokenDeGitHubAqui"
 ```
 
@@ -417,6 +419,40 @@ Para desplegar la versión `0.0.2` (`auth-pipeline-xyz987w`) al entorno inicial 
 ```bash
 kgg kargo promote dev auth-pipeline-xyz987w --pipeline auth-pipeline
 ```
+
+<TerminalShowcase
+  title="local-dev@admin-pc:~"
+  steps={[
+    {
+      type: 'input',
+      text: 'kgg kargo freight --pipeline auth-pipeline'
+    },
+    {
+      type: 'output',
+      text: '📦 Available Freight in homelab:\n  [auth-v0.0.1]      auth-pipeline-abc123d  2026-06-04 10:15  [ghcr.io/gridsovereign/auth-service:0.0.1]\n  [auth-v0.0.2]      auth-pipeline-xyz987w  2026-06-04 14:02  [ghcr.io/gridsovereign/auth-service:0.0.2]'
+    },
+    {
+      type: 'input',
+      text: 'kgg kargo promote dev auth-pipeline-xyz987w --pipeline auth-pipeline'
+    },
+    {
+      type: 'output',
+      text: 'Connecting to cluster and initiating promotion...'
+    },
+    {
+      type: 'success',
+      text: '✅ Promotion to dev started successfully!\nCreated Promotion resource: promotion/dev-auth-pipeline-xyz987w'
+    },
+    {
+      type: 'input',
+      text: 'kgg kargo status --pipeline auth-pipeline'
+    },
+    {
+      type: 'output',
+      text: '🚢 KARGO PIPELINE OBSERVABILITY\nPipeline: auth-pipeline  ·  Project: homelab  ·  Namespace: kargo\nWarehouse: default\n\n🛣️  Stages Pipeline Flow:\n  • Stage: DEV\n    📦 Freight: auth-pipeline-xyz987w (auth-v0.0.2)\n    ❤️  Health:  🟢 Healthy\n    🚢 ArgoCD:  🟢 Healthy\n       Sync:    🟢 Synced\n\n📦 Available Freight (Warehouse):\n  [auth-v0.0.2]      auth-pipelin  2026-06-04 14:02 [ghcr.io/gridsovereign/auth-service:0.0.2] (Active: DEV)\n  [auth-v0.0.1]      auth-pipelin  2026-06-04 10:15 [ghcr.io/gridsovereign/auth-service:0.0.1]'
+    }
+  ]}
+/>
 
 ##### 3. Promover Secuencialmente a STAGING
 Una vez validada en `dev`, el Freight califica para ser promovido a `staging`:

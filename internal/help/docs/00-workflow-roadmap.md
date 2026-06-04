@@ -1,6 +1,6 @@
-# 🗺️ Hoja de Ruta: Flujo de Trabajo Profesional
+# 🗺️ Hoja de Ruta: Flujo de Trabajo
 
-> **Propósito**: Esta guía define la secuencia estratégica para construir, asegurar y escalar tu homelab de forma profesional. Seguir este orden garantiza que cada componente tenga sus dependencias listas antes de ejecutarse.
+> **Propósito**: Esta guía define la secuencia estratégica para construir, asegurar y escalar tu homelab. Seguir este orden garantiza que cada componente tenga sus dependencias listas antes de ejecutarse.
 
 ---
 
@@ -13,7 +13,7 @@ Antes de tocar el clúster, cada nodo debe ser una "isla" estable.
 1.  **Instalación manual**: Sigue la [Guía 1](01-hardware-preparation.md) para instalar Debian y configurar BIOS.
 2.  **Acceso SSH**: Genera tus llaves y distribúyelas (`kgg ssh-keygen` -> `kgg ssh-copy`).
 3.  **Preparación de Discos**: Si tus equipos tienen discos secundarios para datos (8TB, SSDs extras), **este es el momento de formatearlos**.
-    *   **Acción**: `kgg pwr mount` (TUI: Mount Storage).
+    *   **Acción**: `kgg storage mount` (TUI: Mount Storage).
     *   **Por qué**: Longhorn necesita encontrar discos limpios y montados para empezar a replicar datos.
 
 ### Fase 2: Bootstrap del Clúster (The Cluster)
@@ -22,7 +22,7 @@ En lugar de instalar pieza por pieza, usamos la orquestación total.
     *   **Acción**: TUI: Cluster Lifecycle -> Full Site Deploy.
     *   **Resultado**: Provisioning -> K3s HA -> Registry Cache -> Longhorn -> Postgres.
 2.  **Verificación**:
-    *   `kgg status`: Revisa que los 3 servers estén `Ready`.
+    *   `kgg node status`: Revisa que los 3 servers estén `Ready`.
     *   `kgg doctor`: Confirma que el hardware no tiene temperaturas altas ni discos llenos.
 
 ### Fase 3: Ecosistema de Servicios (The Apps)
@@ -31,7 +31,7 @@ Ahora que el clúster es estable, instalamos las herramientas de gestión en est
 | Orden | Acción | Comando | Motivo |
 |:---|:---|:---|:---|
 | **1** | **Ingress & SSL** | `kgg ops cloudflare` | Configura el acceso seguro y tus certificados SSL. |
-| **2** | **GitOps Core** | `kgg ops argocd` | La base para desplegar apps de forma declarativa y profesional. |
+| **2** | **GitOps Core** | `kgg ops argocd` | La base para desplegar apps de forma declarativa. |
 | **3** | **Observabilidad** | `kgg ops observability` | Logs, métricas y alertas para saber qué pasa en tu rack. |
 | **4** | **Disaster Recovery** | `kgg ops backup` | Configura Velero (S3) para que nada de lo anterior se pierda. |
 

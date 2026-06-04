@@ -62,7 +62,7 @@ func (d ConfirmationDialog) View(theme Theme) string {
 		noStyle.Render("No"),
 	)
 
-	// Combine into modal box using professional NormalBorder and Surface background
+	// Combine into modal box using NormalBorder and Surface background
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(theme.BorderColor()).

@@ -48,7 +48,7 @@ func TestKargoDashboardModel_Update_PipelineObservabilityMsg(t *testing.T) {
 		Snapshot: actions.PipelineObservabilitySnapshot{
 			PipelineName: "auth-pipeline",
 			Project:      "homelab",
-			Namespace:    "clandestino-app-dev",
+			Namespace:    "ProjectName-app-dev",
 			Stages: []actions.KargoStageSnapshot{
 				{Name: "dev", CurrentFreight: "8ea3b345d", HealthStatus: "Healthy"},
 			},
@@ -93,17 +93,17 @@ func TestKargoDashboardModel_Update_PipelineObservabilityMsg(t *testing.T) {
 
 func TestFindArgoAppForStage(t *testing.T) {
 	apps := []actions.ArgoAppSnapshot{
-		{Name: "clandestino-app-dev", HealthStatus: "Healthy", SyncStatus: "Synced"},
-		{Name: "clandestino-app-prod", HealthStatus: "Degraded", SyncStatus: "OutOfSync"},
+		{Name: "ProjectName-app-dev", HealthStatus: "Healthy", SyncStatus: "Synced"},
+		{Name: "ProjectName-app-prod", HealthStatus: "Degraded", SyncStatus: "OutOfSync"},
 	}
 
 	app := findArgoAppForStage(apps, "dev")
-	if app == nil || app.Name != "clandestino-app-dev" {
+	if app == nil || app.Name != "ProjectName-app-dev" {
 		t.Errorf("failed to match app for stage 'dev'")
 	}
 
 	app = findArgoAppForStage(apps, "prod")
-	if app == nil || app.Name != "clandestino-app-prod" {
+	if app == nil || app.Name != "ProjectName-app-prod" {
 		t.Errorf("failed to match app for stage 'prod'")
 	}
 

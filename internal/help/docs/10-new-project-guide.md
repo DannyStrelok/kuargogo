@@ -15,7 +15,7 @@ Aquí vivirá el código fuente de tus microservicios (ej. `auth-service`, `chat
 
 ### 2. Repositorio de Operaciones (Ops Repo)
 Aquí vivirán los manifiestos YAML de Kubernetes que dictan cómo se despliega la app.
-- **Estructura Recomendada**: Crea un repositorio (ej. `clandestino-ops`) con carpetas separadas para cada entorno:
+- **Estructura Recomendada**: Crea un repositorio (ej. `ProjectName-ops`) con carpetas separadas para cada entorno:
   ```text
   /environments
     /dev
@@ -52,7 +52,7 @@ Aquí definimos cómo viajarán los microservicios por tus entornos.
 - Rellena los datos:
   - **Main Image**: `ghcr.io/tu-usuario/auth-service`
   - **Additional Images**: `ghcr.io/tu-usuario/chat-service` (si tienes múltiples microservicios).
-  - **Git Ops Repo URL**: `https://github.com/tu-usuario/clandestino-ops.git`.
+  - **Git Ops Repo URL**: `https://github.com/tu-usuario/ProjectName-ops.git`.
   - **Stages**: Escribe la tubería y las rutas a las carpetas del Ops Repo:
     `dev:environments/dev,test:environments/test,prod:environments/prod`
 
