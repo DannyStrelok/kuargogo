@@ -21,7 +21,6 @@ var prepCmd = &cobra.Command{
 			return
 		}
 
-		createUser, _ := cmd.Flags().GetBool("create-user")
 		tagsFlag, _ := cmd.Flags().GetString("tags")
 		var tags []string
 		if tagsFlag != "" {
@@ -54,7 +53,7 @@ var prepCmd = &cobra.Command{
 		}
 		fmt.Println("✅ SSH pre-flight check passed")
 
-		result, err := ansible.RunProvision(targetNode.Name, createUser, "", DryRun, tags, nil)
+		result, err := ansible.RunProvision(targetNode.Name, true, "", DryRun, tags, nil)
 		if err != nil {
 			fmt.Printf("Error running playbook: %v\n", err)
 			return
@@ -67,16 +66,14 @@ var prepCmd = &cobra.Command{
 
 		fmt.Println("Provisioning complete!")
 		fmt.Println("\n✅ Node is ready for K3s HA cluster with Longhorn storage.")
-		if createUser {
-			fmt.Println("👤 User 'kgg-admin' created with sudo privileges.")
-		}
+		fmt.Println("👤 User 'kgg-admin' created with sudo privileges.")
+
 		fmt.Println("📝 Note: A reboot may be required for kernel modules to fully load.")
 	},
 }
 
 func init() {
 	prepCmd.Flags().String("node", "", "IP address of the node to provision")
-	prepCmd.Flags().Bool("create-user", false, "Create 'kgg-admin' user with sudo privileges")
 	prepCmd.Flags().String("tags", "", "Comma-separated Ansible tags to run (e.g. firewall,kernel)")
 	rootCmd.AddCommand(prepCmd)
 }

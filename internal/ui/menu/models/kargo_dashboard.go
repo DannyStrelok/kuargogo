@@ -182,7 +182,8 @@ func (m *KargoDashboardModel) View() tea.View {
 			Bold(true).
 			Foreground(m.theme.PrimaryColor()).
 			Render(fmt.Sprintf("Stage: %s", strings.ToUpper(stage.Name)))
-		sb.WriteString(stageTitle + "\n")
+		sb.WriteString(stageTitle)
+		sb.WriteString("\n")
 
 		freightVal := stage.CurrentFreight
 		if freightVal == "" {
@@ -288,8 +289,10 @@ func (m *KargoDashboardModel) View() tea.View {
 	// 2. Render Freight list
 	freightHeader := headerStyle.Render("📦 Available Freight (Artifacts in Warehouse)")
 	var fl strings.Builder
-	fl.WriteString(freightHeader + "\n")
-	fl.WriteString(dimStyle.Render("Use Up/Down (k/j) to navigate · Enter to Promote Selected Freight") + "\n\n")
+	fl.WriteString(freightHeader)
+	fl.WriteString("\n")
+	fl.WriteString(dimStyle.Render("Use Up/Down (k/j) to navigate · Enter to Promote Selected Freight"))
+	fl.WriteString("\n\n")
 
 	if len(m.snapshot.Freights) == 0 {
 		fl.WriteString("  No freight available in warehouse. Reconcile or wait for warehouse to sync.\n")
@@ -340,25 +343,31 @@ func (m *KargoDashboardModel) View() tea.View {
 				activeStages,
 			)
 
-			fl.WriteString(prefix + itemStyle.Render(line) + "\n")
+			fl.WriteString(prefix)
+			fl.WriteString(itemStyle.Render(line))
+			fl.WriteString("\n")
 		}
 	}
 
 	// 3. Assemble full View
 	var s strings.Builder
-	s.WriteString(titleStyle.Render("🚢 KARGO PIPELINE OBSERVABILITY") + "\n")
+	s.WriteString(titleStyle.Render("🚢 KARGO PIPELINE OBSERVABILITY"))
+	s.WriteString("\n")
 	fmt.Fprintf(&s, "%s %s  ·  %s %s  ·  %s %s\n",
 		headerStyle.Render("Pipeline:"), m.snapshot.PipelineName,
 		headerStyle.Render("Project:"), m.snapshot.Project,
 		headerStyle.Render("Namespace:"), m.snapshot.Namespace)
 	fmt.Fprintf(&s, "%s %s\n\n", headerStyle.Render("Warehouse:"), m.snapshot.WarehouseName)
 
-	s.WriteString(headerStyle.Render("🛣️  Stages Pipeline Flow") + "\n")
-	s.WriteString(pipelineView + "\n\n")
+	s.WriteString(headerStyle.Render("🛣️  Stages Pipeline Flow"))
+	s.WriteString("\n")
+	s.WriteString(pipelineView)
+	s.WriteString("\n\n")
 
 	s.WriteString(fl.String())
 
-	s.WriteString("\n" + dimStyle.Render("Press 'r' to refresh · 'esc' to go back · 'q' to quit"))
+	s.WriteString("\n")
+	s.WriteString(dimStyle.Render("Press 'r' to refresh · 'esc' to go back · 'q' to quit"))
 
 	return tea.NewView(s.String())
 }

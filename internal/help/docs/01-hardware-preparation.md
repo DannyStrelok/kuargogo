@@ -160,7 +160,7 @@ Para garantizar que los nodos de cómputo sean estables bajo carga de Kubernetes
 ### 3.5. Verificación SSH
 
 > [!TIP]
-> **Sobre el usuario**: Instala con el usuario `debian` para el acceso SSH inicial. Más adelante, `kgg prep --create-user` creará automáticamente el usuario `kgg-admin` con privilegios sudo para operaciones del clúster.
+> **Sobre el usuario**: Instala con el usuario `debian` para el acceso SSH inicial. Más adelante, `kgg prep` creará automáticamente el usuario `kgg-admin` con privilegios sudo para operaciones del clúster.
 
 Verifica que cada nodo tiene acceso SSH desde tu Admin PC:
 ```bash
