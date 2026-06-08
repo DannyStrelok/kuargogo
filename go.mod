@@ -19,7 +19,7 @@ require (
 	github.com/eclipse/paho.mqtt.golang v1.5.1
 	github.com/fatih/color v1.19.0
 	github.com/fsnotify/fsnotify v1.10.1
-	github.com/go-viper/mapstructure/v2 v2.4.0
+	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/grandcat/zeroconf v1.0.0
 	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118
 	github.com/mdlayher/lldp v0.0.0-20150915211757-afd9f83164c5
