@@ -327,6 +327,7 @@ func loadConfigInternal() error {
 			mapstructure.StringToTimeHookFunc(time.RFC3339),
 			mapstructure.StringToSliceHookFunc(","),
 			secretDecodeHook(),
+			extraArgsDecodeHook(),
 		)
 	}); err != nil {
 		return fmt.Errorf("failed to unmarshal root config: %w", err)
@@ -342,6 +343,7 @@ func loadConfigInternal() error {
 				mapstructure.StringToTimeHookFunc(time.RFC3339),
 				mapstructure.StringToSliceHookFunc(","),
 				secretDecodeHook(),
+				extraArgsDecodeHook(),
 			)
 		}); err == nil && len(legacyConf.Nodes) > 0 {
 			// Found legacy data. Migrate it.
@@ -836,5 +838,75 @@ func secretDecodeHook() mapstructure.DecodeHookFunc {
 		}
 
 		return Secret(decrypted), nil
+	}
+}
+
+// extraArgsDecodeHook is a mapstructure DecodeHookFunc that handles the ExtraArgs type.
+func extraArgsDecodeHook() mapstructure.DecodeHookFunc {
+	return func(
+		f reflect.Type,
+		t reflect.Type,
+		data interface{}) (interface{}, error) {
+
+		if t != reflect.TypeOf(ExtraArgs(nil)) {
+			return data, nil
+		}
+
+		res := make(ExtraArgs)
+
+		// Case 1: Source is a map
+		if m, ok := data.(map[string]interface{}); ok {
+			for k, v := range m {
+				res[k] = v
+			}
+			return res, nil
+		}
+		if m, ok := data.(map[interface{}]interface{}); ok {
+			for k, v := range m {
+				if ks, ok := k.(string); ok {
+					res[ks] = v
+				}
+			}
+			return res, nil
+		}
+
+		// Case 2: Source is a slice (legacy string slice format)
+		var slice []string
+		if s, ok := data.([]interface{}); ok {
+			for _, item := range s {
+				if str, ok := item.(string); ok {
+					slice = append(slice, str)
+				}
+			}
+		} else if s, ok := data.([]string); ok {
+			slice = s
+		}
+
+		if len(slice) > 0 {
+			for _, arg := range slice {
+				cleanArg := strings.TrimPrefix(arg, "--")
+				cleanArg = strings.TrimPrefix(cleanArg, "-")
+
+				parts := strings.SplitN(cleanArg, "=", 2)
+				key := strings.TrimSpace(parts[0])
+				var val interface{} = true
+				if len(parts) > 1 {
+					val = strings.TrimSpace(parts[1])
+				}
+
+				if existing, ok := res[key]; ok {
+					if existSlice, ok := existing.([]interface{}); ok {
+						res[key] = append(existSlice, val)
+					} else {
+						res[key] = []interface{}{existing, val}
+					}
+				} else {
+					res[key] = val
+				}
+			}
+			return res, nil
+		}
+
+		return data, nil
 	}
 }

@@ -94,10 +94,11 @@ contexts:
       vip_interface: "eth0"
       ha: true
       version: "v1.29.2+k3s1"     # Target K3s version to install
-      server_args:                # Custom CLI flags passed to k3s server
-        - "--disable=servicelb"
-        - "--disable=traefik"
-      agent_args: []              # Custom CLI flags passed to k3s agent
+      server_args:                # Custom configuration parameters passed to K3s server config.yaml
+        disable:
+          - "servicelb"
+          - "traefik"
+      agent_args: {}              # Custom configuration parameters passed to K3s agent config.yaml
 
     # -----------------------------------------------------------------
     # 🤖 "The Voice" Telegram Daemon

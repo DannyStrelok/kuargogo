@@ -1,6 +1,7 @@
 package ansible
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -153,11 +154,17 @@ func WriteInventory(w io.Writer, nodes []config.Node) (string, error) {
 	}
 
 	if len(k3sCfg.ServerArgs) > 0 {
-		fmt.Fprintf(&k3sVars, "k3s_server_extra_args=\"%s\"\n", strings.Join(k3sCfg.ServerArgs, ","))
+		serverArgsJSON, err := json.Marshal(k3sCfg.ServerArgs)
+		if err == nil {
+			fmt.Fprintf(&k3sVars, "k3s_server_extra_args='%s'\n", string(serverArgsJSON))
+		}
 	}
 
 	if len(k3sCfg.AgentArgs) > 0 {
-		fmt.Fprintf(&k3sVars, "k3s_agent_extra_args=\"%s\"\n", strings.Join(k3sCfg.AgentArgs, ","))
+		agentArgsJSON, err := json.Marshal(k3sCfg.AgentArgs)
+		if err == nil {
+			fmt.Fprintf(&k3sVars, "k3s_agent_extra_args='%s'\n", string(agentArgsJSON))
+		}
 	}
 
 	// VIP and Server URL
