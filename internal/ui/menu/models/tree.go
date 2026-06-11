@@ -1289,6 +1289,88 @@ func buildOperationsNode() MenuNode {
 				},
 			},
 			{
+				Title:       "🛡️ Velero Disaster Recovery (Restore)",
+				Description: "Restore cluster state from S3",
+				DynamicChildren: func() []MenuNode {
+					cfg := config.GetConfig()
+					var master *config.Node
+					for i := range cfg.Nodes {
+						if cfg.Nodes[i].Role == "master" || cfg.Nodes[i].Role == "control-plane" {
+							master = &cfg.Nodes[i]
+							break
+						}
+					}
+					if master == nil {
+						return []MenuNode{{
+							Title:       "No Master Found",
+							Description: "Configure a master node first",
+						}}
+					}
+
+					kp, _ := cfg.SSH.ExpandedKeyPath()
+					mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, config.IsDryRun())
+					
+					backups, err := mgr.ListVeleroBackups(master.IP)
+					if err != nil {
+						return []MenuNode{{
+							Title:       "⚠️ Error fetching backups",
+							Description: err.Error(),
+						}}
+					}
+
+					if len(backups) == 0 {
+						return []MenuNode{{
+							Title:       "No Backups Found",
+							Description: "Verify S3 bucket/prefix connection in config",
+						}}
+					}
+
+					var nodes []MenuNode
+					for _, b := range backups {
+						backup := b
+						nodes = append(nodes, MenuNode{
+							Title:       fmt.Sprintf("⏪ %s", backup.Name),
+							Description: fmt.Sprintf("Status: %s | Created: %s", backup.Phase, backup.StartTimestamp),
+							Action: func() tea.Cmd {
+								var nsInput string
+								var confirm bool
+								
+								f := huh.NewForm(
+									huh.NewGroup(
+										huh.NewInput().
+											Title("Namespaces to restore").
+											Description("Comma-separated (e.g. 'clandestino-dev,gatus'). Leave empty for ALL.").
+											Value(&nsInput),
+										huh.NewConfirm().
+											Title(fmt.Sprintf("Confirm Restore from %s?", backup.Name)).
+											Description("This will deploy Velero restore resource on the clúster.").
+											Value(&confirm),
+									),
+								)
+								
+								return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+									if !confirm {
+										return func() tea.Msg { return actions.ResultMsg{Output: "Restoration cancelled."} }
+									}
+									var nsList []string
+									if strings.TrimSpace(nsInput) != "" {
+										for _, ns := range strings.Split(nsInput, ",") {
+											cleanNs := strings.TrimSpace(ns)
+											if cleanNs != "" {
+												nsList = append(nsList, cleanNs)
+											}
+										}
+									}
+									return engine.Push(NewOutputModel(actions.OpsStartVeleroRestore(backup.Name, nsList)))
+								}))
+							},
+						})
+					}
+
+					return nodes
+				},
+			},
+			{
 				Title:       "Deploy Observability Stack",
 				Description: "Prometheus, Grafana, and Loki (LGTM)",
 				Action: func() tea.Cmd {
