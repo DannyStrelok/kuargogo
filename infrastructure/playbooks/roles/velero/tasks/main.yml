@@ -36,9 +36,10 @@
     release_namespace: "{{ velero_namespace }}"
     chart_version: "{{ velero_chart_version }}"
     create_namespace: true
+    update_repo_cache: true
     values:
+      snapshotsEnabled: false
       configuration:
-        provider: "{{ velero_provider }}"
         backupStorageLocation:
           - name: default
             provider: "{{ velero_provider }}"
@@ -47,10 +48,11 @@
             config:
               region: "{{ velero_s3_region }}"
               s3Url: "{{ velero_s3_url }}"
-              s3ForcePathStyle: true
+              s3ForcePathStyle: "true"
+        volumeSnapshotLocation: []
       initContainers:
         - name: velero-plugin-for-aws
-          image: velero/velero-plugin-for-aws:v1.10.0
+          image: "velero/velero-plugin-for-aws:{{ velero_aws_plugin_version }}"
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /target

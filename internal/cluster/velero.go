@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 )
 
@@ -137,8 +136,7 @@ func (m *Manager) StartVeleroRestore(masterIP string, backupName string, namespa
 		return "", fmt.Errorf("failed to marshal restore definition: %w", err)
 	}
 
-	jsonStr := strings.ReplaceAll(string(jsonBytes), "'", "'\\''")
-	cmd := fmt.Sprintf("echo '%s' | sudo k3s kubectl apply -f -", jsonStr)
+	cmd := fmt.Sprintf("sudo k3s kubectl apply -f - << 'EOF'\n%s\nEOF", string(jsonBytes))
 
 	executor, err := m.getExecutor()
 	if err != nil {
