@@ -1,7 +1,7 @@
 ---
 velero_namespace: "velero"
 velero_chart_version: "12.0.2" # Installs Velero v1.18.1
-velero_aws_plugin_version: "v1.14.1" # AWS plugin version compatible with Velero v1.18.1
+velero_aws_plugin_version: "v1.8.2" # AWS plugin version (v1 SDK) compatible with Cloudflare R2
 
 # S3 Credentials and config
 velero_s3_url: ""

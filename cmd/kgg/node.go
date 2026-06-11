@@ -193,6 +193,7 @@ func runHealthCheck(ip, name, user string) {
 		return
 	}
 	executor.Stdout = os.Stdout
+	executor.Stderr = os.Stderr
 
 	// 1. Fetch metrics from Prometheus API (Fast)
 	// We always query through a master node to ensure internal cluster DNS/IP access
