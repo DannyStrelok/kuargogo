@@ -25,6 +25,11 @@ type SwitchController interface {
 
 	// Reboot restarts the switch
 	Reboot() error
+
+	// SetPortState modifies the state (UP/DOWN) of a specific port
+	SetPortState(portID string, isUp bool) error
+	// SetPortVLAN binds a specific port to a VLAN ID
+	SetPortVLAN(portID string, vlanID int) error
 }
 
 // Manager handles high-level network operations
@@ -77,6 +82,30 @@ func (m *Manager) Reboot() error {
 		}
 	}()
 	return m.driver.Reboot()
+}
+
+func (m *Manager) SetPortState(portID string, isUp bool) error {
+	if err := m.driver.Connect(); err != nil {
+		return err
+	}
+	defer func() {
+		if err := m.driver.Close(); err != nil {
+			log.Printf("Warning: failed to close switch driver: %v", err)
+		}
+	}()
+	return m.driver.SetPortState(portID, isUp)
+}
+
+func (m *Manager) SetPortVLAN(portID string, vlanID int) error {
+	if err := m.driver.Connect(); err != nil {
+		return err
+	}
+	defer func() {
+		if err := m.driver.Close(); err != nil {
+			log.Printf("Warning: failed to close switch driver: %v", err)
+		}
+	}()
+	return m.driver.SetPortVLAN(portID, vlanID)
 }
 
 // ValidatePhysicalConnections checks if the devices connected to ports match the inventory

@@ -1804,6 +1804,7 @@ func buildConfigNode() MenuNode {
 									huh.NewGroup(
 										huh.NewInput().Title("S3 URL").Value(&bk.S3Url),
 										huh.NewInput().Title("Bucket Name").Value(&bk.S3Bucket),
+										huh.NewInput().Title("S3 Folder Prefix").Value(&bk.S3Prefix),
 										huh.NewInput().Title("Region").Value(&bk.S3Region),
 										huh.NewInput().Title("Access Key").Value(&accessStr),
 										huh.NewInput().Title("Secret Key").EchoMode(huh.EchoModePassword).Value(&secretStr),

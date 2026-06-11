@@ -361,6 +361,26 @@ func (e Engine) showBanner() bool {
 func (e Engine) renderBreadcrumbs() string {
 	var header string
 
+	if config.GetConfig().Network.PanicActive {
+		panicBannerStyle := lipgloss.NewStyle().
+			Foreground(lipgloss.Color("9")). // Red
+			Bold(true).
+			Padding(1, 2).
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(lipgloss.Color("9")).
+			Align(lipgloss.Center)
+
+		panicMsg := "🚨🚨🚨 PANIC MODE ACTIVE: SYSTEM IS ISOLATED 🚨🚨🚨\n" +
+			"[Local Cluster is Online  ·  Internet Uplink: DOWN  ·  GitOps Sync: FROZEN]\n" +
+			"To restore system operations, run: kgg network panic restore"
+
+		banner := panicBannerStyle.Render(panicMsg)
+		if e.width > 0 {
+			banner = lipgloss.Place(e.width, lipgloss.Height(banner), lipgloss.Center, lipgloss.Center, banner)
+		}
+		header += banner + "\n\n"
+	}
+
 	// Show Global Context Indicator at the very top using the theme's Accent color
 	ctxStyle := lipgloss.NewStyle().Foreground(e.theme.AccentColor())
 	ctxLine := ctxStyle.Render(fmt.Sprintf("  [CTX: %s]", config.GetCurrentContext()))
@@ -421,6 +441,10 @@ func syncStatusValue(e Engine, status string) string {
 
 func (e Engine) headerHeight() int {
 	h := 3 // CTX (2) + Subtitle (1)
+
+	if config.GetConfig().Network.PanicActive {
+		h += 9 // Banner height (7) + 2 spacing lines
+	}
 
 	// Add banner height only if visible
 	if e.showBanner() {

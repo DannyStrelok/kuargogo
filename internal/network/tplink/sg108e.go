@@ -309,3 +309,11 @@ func (s *SG108E) GetMACTable() (map[string]string, error) {
 func (s *SG108E) Reboot() error {
 	return nil
 }
+
+func (s *SG108E) SetPortState(portID string, isUp bool) error {
+	return nil
+}
+
+func (s *SG108E) SetPortVLAN(portID string, vlanID int) error {
+	return nil
+}

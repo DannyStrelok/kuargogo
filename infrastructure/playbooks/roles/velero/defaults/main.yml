@@ -5,6 +5,7 @@ velero_chart_version: "8.2.1" # Tested stable version for Velero 1.15
 # S3 Credentials and config
 velero_s3_url: ""
 velero_s3_bucket: ""
+velero_s3_prefix: ""
 velero_s3_region: "minio" # Fallback region for MinIO/S3 compatible
 velero_s3_access_key: ""
 velero_s3_secret_key: ""

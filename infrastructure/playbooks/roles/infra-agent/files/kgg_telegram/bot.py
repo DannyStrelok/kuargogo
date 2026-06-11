@@ -40,6 +40,7 @@ from kgg_telegram.handlers.gitops import handle_gitops_menu, cb_gitops
 from kgg_telegram.handlers.storage import handle_storage_menu, cb_storage
 from kgg_telegram.handlers.cloud import handle_cloud_menu, cb_cloud
 from kgg_telegram.handlers.kargo import handle_kargo_menu, cb_kargo
+from kgg_telegram.handlers.panic import handle_panic_menu, cb_panic
 from kgg_telegram.mqtt_bridge import mqtt_alert_listener
 from functools import partial
 from kgg_telegram.scheduler import scheduler_loop
@@ -111,6 +112,7 @@ class RackBot:
         self.dp.message(F.text == "☁️ Cloud")(partial(handle_cloud_menu, ctx))
         self.dp.message(F.text == "🚢 Kargo")(partial(handle_kargo_menu, ctx))
         self.dp.message(Command("kargo"))(partial(handle_kargo_menu, ctx))
+        self.dp.message(Command("panic"))(partial(handle_panic_menu, ctx))
 
         self.dp.message(Command("nodes"))(partial(handle_status, ctx))
         self.dp.message(Command("logs"))(partial(handle_logs_menu, ctx))
@@ -137,6 +139,7 @@ class RackBot:
         self.dp.callback_query(F.data.startswith("storage_"))(partial(cb_storage, ctx))
         self.dp.callback_query(F.data.startswith("cloud_"))(partial(cb_cloud, ctx))
         self.dp.callback_query(F.data.startswith("kargo_"))(partial(cb_kargo, ctx))
+        self.dp.callback_query(F.data.startswith("panic_"))(partial(cb_panic, ctx))
 
         # ------------------------------------------------------------------
         # SSH Console FSM

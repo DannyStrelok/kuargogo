@@ -591,6 +591,7 @@ func getBackupExtraVars(cfg config.ClusterConfig) map[string]string {
 	return map[string]string{
 		"velero_s3_url":        cfg.Backup.S3Url,
 		"velero_s3_bucket":     cfg.Backup.S3Bucket,
+		"velero_s3_prefix":     cfg.Backup.S3Prefix,
 		"velero_s3_region":     cfg.Backup.S3Region,
 		"velero_s3_access_key": string(cfg.Backup.S3AccessKey),
 		"velero_s3_secret_key": string(cfg.Backup.S3SecretKey),

@@ -287,11 +287,22 @@ type Backup struct {
 
 // Network holds switch credentials and connection details
 type Network struct {
-	SwitchIP string `mapstructure:"switch_ip" yaml:"switch_ip"`
-	User     string `mapstructure:"user" yaml:"user"`
-	Password Secret `mapstructure:"pass" yaml:"pass"`
-	APIPort  int    `mapstructure:"api_port" yaml:"api_port"` // For RouterOS or future API usage
-	Driver   string `mapstructure:"driver" yaml:"driver"`     // tplink, mikrotik, simulated
+	SwitchIP       string      `mapstructure:"switch_ip" yaml:"switch_ip"`
+	User           string      `mapstructure:"user" yaml:"user"`
+	Password       Secret      `mapstructure:"pass" yaml:"pass"`
+	APIPort        int         `mapstructure:"api_port" yaml:"api_port"` // For RouterOS or future API usage
+	Driver         string      `mapstructure:"driver" yaml:"driver"`     // tplink, mikrotik, simulated
+	UplinkPort     string      `mapstructure:"uplink_port" yaml:"uplink_port,omitempty"`
+	QuarantineVLAN int         `mapstructure:"quarantine_vlan" yaml:"quarantine_vlan,omitempty"`
+	PanicPolicy    PanicPolicy `mapstructure:"panic_policy" yaml:"panic_policy,omitempty"`
+	PanicActive    bool        `mapstructure:"panic_active" yaml:"panic_active,omitempty"`
+}
+
+type PanicPolicy struct {
+	SoftwareIsolation bool   `mapstructure:"software_isolation" yaml:"software_isolation"`
+	CloudflareKill    bool   `mapstructure:"cloudflare_kill" yaml:"cloudflare_kill"`
+	NetworkIsolation  string `mapstructure:"network_isolation" yaml:"network_isolation"` // "shutdown", "vlan", or "none"
+	NotifyAdmin       bool   `mapstructure:"notify_admin" yaml:"notify_admin"`
 }
 
 // NetworkLayout defines the desired state of the switch (Declared Infrastructure)
