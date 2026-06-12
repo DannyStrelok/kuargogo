@@ -561,6 +561,7 @@ func buildOperationsAndMaintenanceNode() MenuNode {
 		Children: []MenuNode{
 			buildDiagnosticsNode(),
 			buildOperationsNode(),
+			buildBackupNode(),
 			buildCloudSyncNode(),
 		},
 	}
@@ -1290,148 +1291,6 @@ func buildOperationsNode() MenuNode {
 				},
 			},
 			{
-				Title:       "🛡️ Velero Disaster Recovery (Manual Backup)",
-				Description: "Create a manual Velero backup on-demand",
-				Action: func() tea.Cmd {
-					nowStr := time.Now().Format("20060102-150405")
-					backupName := "manual-" + nowStr
-					var nsInput string
-					var ttlInput = "240h0m0s"
-					var confirm bool
-
-					f := huh.NewForm(
-						huh.NewGroup(
-							huh.NewInput().
-								Title("Backup Name").
-								Description("Enter a unique name for this backup").
-								Value(&backupName).
-								Validate(func(s string) error {
-									if strings.TrimSpace(s) == "" {
-										return errors.New("backup name is required")
-									}
-									return nil
-								}),
-							huh.NewInput().
-								Title("Namespaces to backup").
-								Description("Comma-separated (e.g. 'clandestino-dev,gatus'). Leave empty for ALL.").
-								Value(&nsInput),
-							huh.NewInput().
-								Title("TTL (Time To Live)").
-								Description("e.g. '240h0m0s' (10 days) or '72h0m0s' (3 days)").
-								Value(&ttlInput).
-								Validate(func(s string) error {
-									if strings.TrimSpace(s) == "" {
-										return errors.New("TTL is required")
-									}
-									return nil
-								}),
-							huh.NewConfirm().
-								Title("Confirm Backup?").
-								Description("This will apply a manual Backup resource on the cluster.").
-								Value(&confirm),
-						),
-					)
-
-					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
-						if !confirm {
-							return func() tea.Msg { return actions.ResultMsg{Output: "Backup cancelled."} }
-						}
-						var nsList []string
-						if strings.TrimSpace(nsInput) != "" {
-							for _, ns := range strings.Split(nsInput, ",") {
-								cleanNs := strings.TrimSpace(ns)
-								if cleanNs != "" {
-									nsList = append(nsList, cleanNs)
-								}
-							}
-						}
-						return engine.Push(NewOutputModel(actions.OpsCreateVeleroBackup(backupName, nsList, ttlInput)))
-					}))
-				},
-			},
-			{
-				Title:       "🛡️ Velero Disaster Recovery (Restore)",
-				Description: "Restore cluster state from S3",
-				DynamicChildren: func() []MenuNode {
-					cfg := config.GetConfig()
-					var master *config.Node
-					for i := range cfg.Nodes {
-						if cfg.Nodes[i].Role == "master" || cfg.Nodes[i].Role == "control-plane" {
-							master = &cfg.Nodes[i]
-							break
-						}
-					}
-					if master == nil {
-						return []MenuNode{{
-							Title:       "No Master Found",
-							Description: "Configure a master node first",
-						}}
-					}
-
-					kp, _ := cfg.SSH.ExpandedKeyPath()
-					mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, config.IsDryRun())
-					
-					backups, err := mgr.ListVeleroBackups(master.IP)
-					if err != nil {
-						return []MenuNode{{
-							Title:       "⚠️ Error fetching backups",
-							Description: err.Error(),
-						}}
-					}
-
-					if len(backups) == 0 {
-						return []MenuNode{{
-							Title:       "No Backups Found",
-							Description: "Verify S3 bucket/prefix connection in config",
-						}}
-					}
-
-					var nodes []MenuNode
-					for _, b := range backups {
-						backup := b
-						nodes = append(nodes, MenuNode{
-							Title:       fmt.Sprintf("⏪ %s", backup.Name),
-							Description: fmt.Sprintf("Status: %s | Created: %s", backup.Phase, backup.StartTimestamp),
-							Action: func() tea.Cmd {
-								var nsInput string
-								var confirm bool
-								
-								f := huh.NewForm(
-									huh.NewGroup(
-										huh.NewInput().
-											Title("Namespaces to restore").
-											Description("Comma-separated (e.g. 'clandestino-dev,gatus'). Leave empty for ALL.").
-											Value(&nsInput),
-										huh.NewConfirm().
-											Title(fmt.Sprintf("Confirm Restore from %s?", backup.Name)).
-											Description("This will deploy Velero restore resource on the clúster.").
-											Value(&confirm),
-									),
-								)
-								
-								return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
-									if !confirm {
-										return func() tea.Msg { return actions.ResultMsg{Output: "Restoration cancelled."} }
-									}
-									var nsList []string
-									if strings.TrimSpace(nsInput) != "" {
-										for _, ns := range strings.Split(nsInput, ",") {
-											cleanNs := strings.TrimSpace(ns)
-											if cleanNs != "" {
-												nsList = append(nsList, cleanNs)
-											}
-										}
-									}
-									return engine.Push(NewOutputModel(actions.OpsStartVeleroRestore(backup.Name, nsList)))
-								}))
-							},
-						})
-					}
-
-					return nodes
-				},
-			},
-			{
 				Title:       "Deploy Observability Stack",
 				Description: "Prometheus, Grafana, and Loki (LGTM)",
 				Action: func() tea.Cmd {
@@ -1548,6 +1407,310 @@ func buildOperationsNode() MenuNode {
 				Description: "Application promotion & lifecycle manager",
 				Action: func() tea.Cmd {
 					return engine.Push(NewOutputModel(actions.OpsKargo()))
+				},
+			},
+		},
+	}
+}
+
+func buildBackupNode() MenuNode {
+	return MenuNode{
+		Title:       "Backups",
+		Description: "Backup & Restore using Velero and CNPG",
+		Children: []MenuNode{
+			{
+				Title:       "🛡️ Velero Disaster Recovery (Manual Backup)",
+				Description: "Create a manual Velero backup on-demand",
+				Action: func() tea.Cmd {
+					nowStr := time.Now().Format("20060102-150405")
+					backupName := "manual-" + nowStr
+					var nsInput string
+					var ttlInput = "240h0m0s"
+					var confirm bool
+
+					f := huh.NewForm(
+						huh.NewGroup(
+							huh.NewInput().
+								Title("Backup Name").
+								Description("Enter a unique name for this backup").
+								Value(&backupName).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("backup name is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Namespaces to backup").
+								Description("Comma-separated (e.g. 'clandestino-dev,gatus'). Leave empty for ALL.").
+								Value(&nsInput),
+							huh.NewInput().
+								Title("TTL (Time To Live)").
+								Description("e.g. '240h0m0s' (10 days) or '72h0m0s' (3 days)").
+								Value(&ttlInput).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("TTL is required")
+									}
+									return nil
+								}),
+							huh.NewConfirm().
+								Title("Confirm Backup?").
+								Description("This will apply a manual Backup resource on the cluster.").
+								Value(&confirm),
+						),
+					)
+
+					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+						if !confirm {
+							return func() tea.Msg { return actions.ResultMsg{Output: "Backup cancelled."} }
+						}
+						var nsList []string
+						if strings.TrimSpace(nsInput) != "" {
+							for _, ns := range strings.Split(nsInput, ",") {
+								cleanNs := strings.TrimSpace(ns)
+								if cleanNs != "" {
+									nsList = append(nsList, cleanNs)
+								}
+							}
+						}
+						return engine.Push(NewOutputModel(actions.OpsCreateVeleroBackup(backupName, nsList, ttlInput)))
+					}))
+				},
+			},
+			{
+				Title:       "🛡️ Velero Disaster Recovery (Restore)",
+				Description: "Restore cluster state from S3",
+				DynamicChildren: func() []MenuNode {
+					cfg := config.GetConfig()
+					var master *config.Node
+					for i := range cfg.Nodes {
+						if cfg.Nodes[i].Role == "master" || cfg.Nodes[i].Role == "control-plane" {
+							master = &cfg.Nodes[i]
+							break
+						}
+					}
+					if master == nil {
+						return []MenuNode{{
+							Title:       "No Master Found",
+							Description: "Configure a master node first",
+						}}
+					}
+
+					kp, _ := cfg.SSH.ExpandedKeyPath()
+					mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, config.IsDryRun())
+
+					backups, err := mgr.ListVeleroBackups(master.IP)
+					if err != nil {
+						return []MenuNode{{
+							Title:       "⚠️ Error fetching backups",
+							Description: err.Error(),
+						}}
+					}
+
+					if len(backups) == 0 {
+						return []MenuNode{{
+							Title:       "No Backups Found",
+							Description: "Verify S3 bucket/prefix connection in config",
+						}}
+					}
+
+					var nodes []MenuNode
+					for _, b := range backups {
+						backup := b
+						nodes = append(nodes, MenuNode{
+							Title:       fmt.Sprintf("⏪ %s", backup.Name),
+							Description: fmt.Sprintf("Status: %s | Created: %s", backup.Phase, backup.StartTimestamp),
+							Action: func() tea.Cmd {
+								var nsInput string
+								var confirm bool
+
+								f := huh.NewForm(
+									huh.NewGroup(
+										huh.NewInput().
+											Title("Namespaces to restore").
+											Description("Comma-separated (e.g. 'clandestino-dev,gatus'). Leave empty for ALL.").
+											Value(&nsInput),
+										huh.NewConfirm().
+											Title(fmt.Sprintf("Confirm Restore from %s?", backup.Name)).
+											Description("This will deploy Velero restore resource on the clúster.").
+											Value(&confirm),
+									),
+								)
+
+								return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+									if !confirm {
+										return func() tea.Msg { return actions.ResultMsg{Output: "Restoration cancelled."} }
+									}
+									var nsList []string
+									if strings.TrimSpace(nsInput) != "" {
+										for _, ns := range strings.Split(nsInput, ",") {
+											cleanNs := strings.TrimSpace(ns)
+											if cleanNs != "" {
+												nsList = append(nsList, cleanNs)
+											}
+										}
+									}
+									return engine.Push(NewOutputModel(actions.OpsStartVeleroRestore(backup.Name, nsList)))
+								}))
+							},
+						})
+					}
+
+					return nodes
+				},
+			},
+			{
+				Title:       "💾 CNPG Database Backup (Manual)",
+				Description: "Trigger an on-demand physical backup of a CNPG database to R2",
+				Action: func() tea.Cmd {
+					namespace := "clandestino-dev"
+					clusterName := "clandestino-db"
+					nowStr := time.Now().Format("20060102-150405")
+					backupName := "manual-" + nowStr
+					var confirm bool
+
+					f := huh.NewForm(
+						huh.NewGroup(
+							huh.NewInput().
+								Title("Namespace").
+								Description("Namespace where the database cluster is deployed").
+								Value(&namespace).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("namespace is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Cluster Name").
+								Description("Name of the CloudNativePG cluster").
+								Value(&clusterName).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("cluster name is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Backup Name").
+								Description("Enter a unique name for this backup").
+								Value(&backupName).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("backup name is required")
+									}
+									return nil
+								}),
+							huh.NewConfirm().
+								Title("Confirm Backup?").
+								Description("This will apply a CNPG Backup resource on the cluster.").
+								Value(&confirm),
+						),
+					)
+
+					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+						if !confirm {
+							return func() tea.Msg { return actions.ResultMsg{Output: "Backup cancelled."} }
+						}
+						return engine.Push(NewOutputModel(actions.OpsCreateCNPGBackup(clusterName, backupName, namespace)))
+					}))
+				},
+			},
+			{
+				Title:       "🕒 CNPG Database Time Machine (Restore / PITR)",
+				Description: "Restore database state to a specific point in time (PITR)",
+				Action: func() tea.Cmd {
+					namespace := "clandestino-dev"
+					sourceCluster := "clandestino-db"
+					targetCluster := "clandestino-db-pitr"
+					timeStr := ""
+					force := false
+					var confirm bool
+
+					f := huh.NewForm(
+						huh.NewGroup(
+							huh.NewInput().
+								Title("Namespace").
+								Description("Namespace of the cluster").
+								Value(&namespace).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("namespace is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Source Cluster Name").
+								Description("Name of the cluster to recover").
+								Value(&sourceCluster).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("source cluster name is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Target Recovery Time").
+								Description("UTC timestamp format: YYYY-MM-DD HH:MM:SS or RFC3339").
+								Value(&timeStr).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("target time is required")
+									}
+									_, err := cluster.ParseTargetTime(s)
+									if err != nil {
+										return fmt.Errorf("invalid time: %w", err)
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Target Cluster Name").
+								Description("Name for the recovered cluster").
+								Value(&targetCluster).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("target cluster name is required")
+									}
+									return nil
+								}),
+							huh.NewConfirm().
+								Title("Overwrite Active Cluster? (In-Place Restore)").
+								Description("If yes, deletes active cluster & PVCs first. Target Name is ignored.").
+								Value(&force),
+							huh.NewConfirm().
+								Title("Proceed with Restore?").
+								Value(&confirm),
+						),
+					)
+
+					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+						if !confirm {
+							return func() tea.Msg { return actions.ResultMsg{Output: "Restoration cancelled."} }
+						}
+
+						if force {
+							var confirmInput string
+							fConfirm := huh.NewForm(
+								huh.NewGroup(
+									huh.NewInput().
+										Title(fmt.Sprintf("⚠️ DANGER: In-place restore will DELETE cluster %q and all its data. Type the cluster name to confirm:", sourceCluster)).
+										Value(&confirmInput).
+										Validate(func(s string) error {
+											if s != sourceCluster {
+												return fmt.Errorf("must type %q exactly", sourceCluster)
+											}
+											return nil
+										}),
+								),
+							)
+							return engine.Push(NewFormModel(fConfirm, func(form *huh.Form) tea.Cmd {
+								return engine.Push(NewOutputModel(actions.OpsRestoreCNPGCluster(sourceCluster, sourceCluster, namespace, timeStr, true)))
+							}))
+						}
+
+						return engine.Push(NewOutputModel(actions.OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr, false)))
+					}))
 				},
 			},
 		},
@@ -2956,7 +3119,7 @@ func buildDomainsAndServicesNode() MenuNode {
 
 func buildCloudSyncNode() MenuNode {
 	return MenuNode{
-		Title:       "☁️  Cloud Sync & Backup",
+		Title:       "☁️ Kuargogo Cloud Sync & Backup",
 		Description: "Secure off-site E2E encrypted configuration storage",
 		DynamicChildren: func() []MenuNode {
 			sync := config.RootConfigGetSync()
