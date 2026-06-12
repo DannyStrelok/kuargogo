@@ -181,6 +181,98 @@ func (m *Manager) GetVeleroRestoreStatus(masterIP string, restoreName string) (s
 	return phase, nil
 }
 
+type backupJSONStatus struct {
+	Status struct {
+		Phase string `json:"phase"`
+	} `json:"status"`
+}
+
+// CreateVeleroBackup triggers a manual Velero backup in the cluster via SSH.
+// It returns the name of the Backup resource.
+func (m *Manager) CreateVeleroBackup(masterIP string, backupName string, namespaces []string, ttlStr string) (string, error) {
+	if m.DryRun {
+		return backupName, nil
+	}
+
+	type backupSpec struct {
+		IncludedNamespaces       []string `json:"includedNamespaces,omitempty"`
+		TTL                      string   `json:"ttl,omitempty"`
+		DefaultVolumesToFsBackup bool     `json:"defaultVolumesToFsBackup"`
+	}
+	type backupDef struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
+		Metadata   struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+		Spec backupSpec `json:"spec"`
+	}
+
+	def := backupDef{
+		APIVersion: "velero.io/v1",
+		Kind:       "Backup",
+	}
+	def.Metadata.Name = backupName
+	def.Metadata.Namespace = "velero"
+	def.Spec.DefaultVolumesToFsBackup = true
+	if len(namespaces) > 0 {
+		def.Spec.IncludedNamespaces = namespaces
+	}
+	if ttlStr != "" {
+		def.Spec.TTL = ttlStr
+	}
+
+	jsonBytes, err := json.Marshal(def)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal backup definition: %w", err)
+	}
+
+	cmd := fmt.Sprintf("sudo k3s kubectl apply -f - << 'EOF'\n%s\nEOF", string(jsonBytes))
+
+	executor, err := m.getExecutor()
+	if err != nil {
+		return "", err
+	}
+
+	_, err = executor.ExecuteCommand(masterIP, m.Port, cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to apply backup manifest: %w", err)
+	}
+
+	return backupName, nil
+}
+
+// GetVeleroBackupStatus queries the phase status of a backup operation via SSH.
+func (m *Manager) GetVeleroBackupStatus(masterIP string, backupName string) (string, error) {
+	if m.DryRun {
+		return "Completed", nil
+	}
+
+	cmd := fmt.Sprintf("sudo k3s kubectl get backup.velero.io -n velero %s -o json", backupName)
+	executor, err := m.getExecutor()
+	if err != nil {
+		return "", err
+	}
+
+	out, err := executor.ExecuteCommand(masterIP, m.Port, cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to get backup status: %w", err)
+	}
+
+	var rawStatus backupJSONStatus
+	if err := json.Unmarshal([]byte(out), &rawStatus); err != nil {
+		return "", fmt.Errorf("failed to parse backup status JSON: %w", err)
+	}
+
+	phase := rawStatus.Status.Phase
+	if phase == "" {
+		phase = "New"
+	}
+
+	return phase, nil
+}
+
 func generateRandomSuffix(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)

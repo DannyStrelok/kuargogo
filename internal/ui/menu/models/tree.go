@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/glamour/v2"
@@ -1286,6 +1287,66 @@ func buildOperationsNode() MenuNode {
 				Description: "Backup cluster and volumes to S3",
 				Action: func() tea.Cmd {
 					return engine.Push(NewOutputModel(actions.OpsBackupSystem()))
+				},
+			},
+			{
+				Title:       "🛡️ Velero Disaster Recovery (Manual Backup)",
+				Description: "Create a manual Velero backup on-demand",
+				Action: func() tea.Cmd {
+					nowStr := time.Now().Format("20060102-150405")
+					backupName := "manual-" + nowStr
+					var nsInput string
+					var ttlInput = "240h0m0s"
+					var confirm bool
+
+					f := huh.NewForm(
+						huh.NewGroup(
+							huh.NewInput().
+								Title("Backup Name").
+								Description("Enter a unique name for this backup").
+								Value(&backupName).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("backup name is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Namespaces to backup").
+								Description("Comma-separated (e.g. 'clandestino-dev,gatus'). Leave empty for ALL.").
+								Value(&nsInput),
+							huh.NewInput().
+								Title("TTL (Time To Live)").
+								Description("e.g. '240h0m0s' (10 days) or '72h0m0s' (3 days)").
+								Value(&ttlInput).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("TTL is required")
+									}
+									return nil
+								}),
+							huh.NewConfirm().
+								Title("Confirm Backup?").
+								Description("This will apply a manual Backup resource on the cluster.").
+								Value(&confirm),
+						),
+					)
+
+					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+						if !confirm {
+							return func() tea.Msg { return actions.ResultMsg{Output: "Backup cancelled."} }
+						}
+						var nsList []string
+						if strings.TrimSpace(nsInput) != "" {
+							for _, ns := range strings.Split(nsInput, ",") {
+								cleanNs := strings.TrimSpace(ns)
+								if cleanNs != "" {
+									nsList = append(nsList, cleanNs)
+								}
+							}
+						}
+						return engine.Push(NewOutputModel(actions.OpsCreateVeleroBackup(backupName, nsList, ttlInput)))
+					}))
 				},
 			},
 			{
