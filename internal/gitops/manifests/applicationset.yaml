@@ -32,5 +32,5 @@ spec:
       - group: postgresql.cnpg.io
         kind: Cluster
         jsonPointers:
-        - /spec/storage/pvcTemplate/metadata/annotations
-        - /spec/walStorage/pvcTemplate/metadata/annotations
+        - /spec/storage/pvcTemplate/metadata
+        - /spec/walStorage/pvcTemplate/metadata
