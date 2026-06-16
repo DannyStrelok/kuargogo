@@ -1,7 +1,9 @@
 package actions
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -211,3 +213,152 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
+
+// OpsListCNPGBackups retrieves the list of CNPG backups and writes them formatted to the progress channel.
+func OpsListCNPGBackups(clusterName, namespace string) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 10)
+
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
+
+			cfg := config.GetConfig()
+			var master *config.Node
+			for _, n := range cfg.Nodes {
+				if n.Role == "master" || n.Role == "control-plane" {
+					master = &n
+					break
+				}
+			}
+			if master == nil {
+				_, _ = writer.Write([]byte("❌ Error: no master node found in configuration\n"))
+				return
+			}
+
+			keyPath, err := cfg.SSH.ExpandedKeyPath()
+			if err != nil {
+				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error: %v\n", err)))
+				return
+			}
+
+			mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, config.IsDryRun())
+			mgr.Output = writer
+
+			_, _ = writer.Write([]byte(fmt.Sprintf("🔍 Listing CNPG backups for cluster %q in namespace %q...\n", clusterName, namespace)))
+
+			if config.IsDryRun() {
+				_, _ = writer.Write([]byte("\n💾 [DRY RUN] Backups list:\n"))
+				_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
+				_, _ = writer.Write([]byte("BACKUP NAME                         STATUS          CREATED AT               \n"))
+				_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
+				_, _ = writer.Write([]byte("clandestino-db-daily-backup-20260613 completed       2026-06-16T18:05:23Z     \n"))
+				_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
+				return
+			}
+
+			backups, err := mgr.ListCNPGBackups(master.IP, namespace, clusterName)
+			if err != nil {
+				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error listing backups: %v\n", err)))
+				return
+			}
+
+			if len(backups) == 0 {
+				_, _ = writer.Write([]byte("\n📭 No backups found for this cluster.\n"))
+				return
+			}
+
+			// Sort backups descending by creation timestamp (newest first)
+			sort.Slice(backups, func(i, j int) bool {
+				t1, err1 := time.Parse(time.RFC3339, backups[i].CreatedAt)
+				t2, err2 := time.Parse(time.RFC3339, backups[j].CreatedAt)
+				if err1 == nil && err2 == nil {
+					return t1.After(t2)
+				}
+				return backups[i].CreatedAt > backups[j].CreatedAt
+			})
+
+			_, _ = writer.Write([]byte("\n💾 AVAILABLE CNPG BACKUPS:\n"))
+			_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
+			_, _ = writer.Write([]byte(fmt.Sprintf("%-50s %-12s %-20s\n", "BACKUP NAME", "STATUS", "CREATED AT")))
+			_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
+			for _, b := range backups {
+				_, _ = writer.Write([]byte(fmt.Sprintf("%-50s %-12s %-20s\n", b.Name, b.Phase, b.CreatedAt)))
+			}
+			_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
+	}
+}
+
+// OpsCNPGTunnel starts an SSH port-forwarding tunnel to the CNPG database and prints credentials.
+func OpsCNPGTunnel(clusterName, namespace string, localPort int) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 10)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		RegisterTunnel(cancel)
+
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
+
+			cfg := config.GetConfig()
+			var master *config.Node
+			for _, n := range cfg.Nodes {
+				if n.Role == "master" || n.Role == "control-plane" {
+					master = &n
+					break
+				}
+			}
+			if master == nil {
+				_, _ = writer.Write([]byte("❌ Error: no master node found in configuration\n"))
+				return
+			}
+
+			tm := cluster.NewTunnelManager(writer)
+
+			_, _ = writer.Write([]byte("🚀 Initializing Local Access to CNPG Database...\n"))
+
+			// Query credentials to show to the user
+			if !config.IsDryRun() {
+				keyPath, err := cfg.SSH.ExpandedKeyPath()
+				if err == nil {
+					mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, false)
+					password, err := mgr.GetCNPGAppUserPassword(master.IP, namespace, clusterName)
+					if err == nil {
+						_, _ = writer.Write([]byte("\n🔐 DATABASE CREDENTIALS (App User):\n"))
+						_, _ = writer.Write([]byte(fmt.Sprintf("   Host:      localhost\n")))
+						_, _ = writer.Write([]byte(fmt.Sprintf("   Port:      %d\n", localPort)))
+						_, _ = writer.Write([]byte(fmt.Sprintf("   User:      app\n")))
+						_, _ = writer.Write([]byte(fmt.Sprintf("   Password:  %s\n\n", password)))
+					}
+				}
+			} else {
+				_, _ = writer.Write([]byte("\n🔐 DATABASE CREDENTIALS (App User - [DRY RUN]):\n"))
+				_, _ = writer.Write([]byte(fmt.Sprintf("   Host:      localhost\n")))
+				_, _ = writer.Write([]byte(fmt.Sprintf("   Port:      %d\n", localPort)))
+				_, _ = writer.Write([]byte(fmt.Sprintf("   User:      app\n")))
+				_, _ = writer.Write([]byte(fmt.Sprintf("   Password:  dummy-dryrun-password\n\n")))
+			}
+
+			err := tm.StartCNPGTunnel(ctx, localPort, namespace, clusterName)
+			if err != nil {
+				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Failed starting tunnel: %v", err)))
+				return
+			}
+
+			_, _ = writer.Write([]byte("\n🔓 Database Access ACTIVE"))
+			_, _ = writer.Write([]byte("\n----------------------------------------"))
+			_, _ = writer.Write([]byte("\nPress 'esc' or 'q' to close the tunnel and return."))
+
+			<-ctx.Done()
+			_, _ = writer.Write([]byte("\n🔌 Tunnel closed.\n"))
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
+	}
+}
+
+

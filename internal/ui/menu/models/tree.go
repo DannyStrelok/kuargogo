@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -594,7 +595,7 @@ func buildDisasterRecoveryNode() MenuNode {
 								}
 							}
 						}
-						return engine.Push(NewOutputModel(actions.OpsCreateVeleroBackup(backupName, nsList, ttlInput)))
+						return actions.OpsCreateVeleroBackup(backupName, nsList, ttlInput)
 					}))
 				},
 			},
@@ -671,7 +672,7 @@ func buildDisasterRecoveryNode() MenuNode {
 											}
 										}
 									}
-									return engine.Push(NewOutputModel(actions.OpsStartVeleroRestore(backup.Name, nsList)))
+									return actions.OpsStartVeleroRestore(backup.Name, nsList)
 								}))
 							},
 						})
@@ -733,26 +734,23 @@ func buildDisasterRecoveryNode() MenuNode {
 						if !confirm {
 							return func() tea.Msg { return actions.ResultMsg{Output: "Backup cancelled."} }
 						}
-						return engine.Push(NewOutputModel(actions.OpsCreateCNPGBackup(clusterName, backupName, namespace)))
+						return actions.OpsCreateCNPGBackup(clusterName, backupName, namespace)
 					}))
 				},
 			},
 			{
-				Title:       "🕒 CNPG Database Time Machine (Restore / PITR)",
-				Description: "Restore database state to a specific point in time (PITR)",
+				Title:       "📋 CNPG Database Backup (List)",
+				Description: "List available physical backups of a CNPG database",
 				Action: func() tea.Cmd {
 					namespace := "clandestino-dev"
-					sourceCluster := "clandestino-db"
-					targetCluster := "clandestino-db-pitr"
-					timeStr := ""
-					force := false
+					clusterName := "clandestino-db"
 					var confirm bool
 
 					f := huh.NewForm(
 						huh.NewGroup(
 							huh.NewInput().
 								Title("Namespace").
-								Description("Namespace of the cluster").
+								Description("Namespace where the database cluster is deployed").
 								Value(&namespace).
 								Validate(func(s string) error {
 									if strings.TrimSpace(s) == "" {
@@ -761,75 +759,153 @@ func buildDisasterRecoveryNode() MenuNode {
 									return nil
 								}),
 							huh.NewInput().
-								Title("Source Cluster Name").
-								Description("Name of the cluster to recover").
-								Value(&sourceCluster).
+								Title("Cluster Name").
+								Description("Name of the CloudNativePG cluster").
+								Value(&clusterName).
 								Validate(func(s string) error {
 									if strings.TrimSpace(s) == "" {
-										return errors.New("source cluster name is required")
-									}
-									return nil
-								}),
-							huh.NewInput().
-								Title("Target Recovery Time").
-								Description("UTC timestamp format: YYYY-MM-DD HH:MM:SS or RFC3339").
-								Value(&timeStr).
-								Validate(func(s string) error {
-									if strings.TrimSpace(s) == "" {
-										return errors.New("target time is required")
-									}
-									_, err := cluster.ParseTargetTime(s)
-									if err != nil {
-										return fmt.Errorf("invalid time: %w", err)
-									}
-									return nil
-								}),
-							huh.NewInput().
-								Title("Target Cluster Name").
-								Description("Name for the recovered cluster").
-								Value(&targetCluster).
-								Validate(func(s string) error {
-									if strings.TrimSpace(s) == "" {
-										return errors.New("target cluster name is required")
+										return errors.New("cluster name is required")
 									}
 									return nil
 								}),
 							huh.NewConfirm().
-								Title("Overwrite Active Cluster? (In-Place Restore)").
-								Description("If yes, deletes active cluster & PVCs first. Target Name is ignored.").
-								Value(&force),
-							huh.NewConfirm().
-								Title("Proceed with Restore?").
+								Title("Query Backups?").
+								Description("This will execute a query via SSH on the master node.").
 								Value(&confirm),
 						),
 					)
 
 					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
 						if !confirm {
-							return func() tea.Msg { return actions.ResultMsg{Output: "Restoration cancelled."} }
+							return func() tea.Msg { return actions.ResultMsg{Output: "Listing cancelled."} }
 						}
-
-						if force {
-							var confirmInput string
-							fConfirm := huh.NewForm(
-								huh.NewGroup(
-									huh.NewInput().
-										Title(fmt.Sprintf("⚠️ DANGER: In-place restore will DELETE cluster %q and all its data. Type the cluster name to confirm:", sourceCluster)).
-										Value(&confirmInput).
-										Validate(func(s string) error {
-											if s != sourceCluster {
-												return fmt.Errorf("must type %q exactly", sourceCluster)
-											}
-											return nil
-										}),
-								),
-							)
-							return engine.Push(NewFormModel(fConfirm, func(form *huh.Form) tea.Cmd {
-								return engine.Push(NewOutputModel(actions.OpsRestoreCNPGCluster(sourceCluster, sourceCluster, namespace, timeStr, true)))
-							}))
+						return actions.OpsListCNPGBackups(clusterName, namespace)
+					}))
+				},
+			},
+			{
+				Title:       "🕒 CNPG Database Time Machine (Restore / PITR)",
+				Description: "Restore database state to a specific point in time (PITR)",
+				DynamicChildren: func() []MenuNode {
+					cfg := config.GetConfig()
+					var master *config.Node
+					for i := range cfg.Nodes {
+						if cfg.Nodes[i].Role == "master" || cfg.Nodes[i].Role == "control-plane" {
+							master = &cfg.Nodes[i]
+							break
 						}
+					}
+					if master == nil {
+						return []MenuNode{{
+							Title:       "No Master Found",
+							Description: "Configure a master node first",
+						}}
+					}
 
-						return engine.Push(NewOutputModel(actions.OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr, false)))
+					// Option to enter time manually
+					nodes := []MenuNode{
+						{
+							Title:       "🕒 Restore to custom point-in-time",
+							Description: "Enter date and time manually (RFC3339 or YYYY-MM-DD HH:MM:SS)",
+							Action: func() tea.Cmd {
+								return triggerCNPGRestoreForm("clandestino-dev", "clandestino-db", "")
+							},
+						},
+					}
+
+					kp, _ := cfg.SSH.ExpandedKeyPath()
+					mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, config.IsDryRun())
+
+					// Get list of CNPG backups (using default namespace/cluster)
+					backups, err := mgr.ListCNPGBackups(master.IP, "clandestino-dev", "clandestino-db")
+					if err != nil {
+						// Fallback if error, just return the manual option with warning
+						nodes = append(nodes, MenuNode{
+							Title:       "⚠️ Error listing backups",
+							Description: err.Error(),
+						})
+						return nodes
+					}
+
+					// Sort backups descending (newest first)
+					sort.Slice(backups, func(i, j int) bool {
+						t1, _ := time.Parse(time.RFC3339, backups[i].CreatedAt)
+						t2, _ := time.Parse(time.RFC3339, backups[j].CreatedAt)
+						return t1.After(t2)
+					})
+
+					for _, b := range backups {
+						if b.Phase != "completed" {
+							continue
+						}
+						backup := b
+						nodes = append(nodes, MenuNode{
+							Title:       fmt.Sprintf("⏪ %s", backup.Name),
+							Description: fmt.Sprintf("Created: %s", backup.CreatedAt),
+							Action: func() tea.Cmd {
+								return triggerCNPGRestoreForm("clandestino-dev", "clandestino-db", backup.CreatedAt)
+							},
+						})
+					}
+
+					return nodes
+				},
+			},
+			{
+				Title:       "🔌 CNPG Database Local Access (Tunnel)",
+				Description: "Create a secure SSH port-forwarding tunnel to query CNPG from DBeaver",
+				Action: func() tea.Cmd {
+					namespace := "clandestino-dev"
+					clusterName := "clandestino-db"
+					localPortStr := "5433"
+					var confirm bool
+
+					f := huh.NewForm(
+						huh.NewGroup(
+							huh.NewInput().
+								Title("Namespace").
+								Description("Namespace of the database cluster").
+								Value(&namespace).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("namespace is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Cluster Name").
+								Description("Name of the CloudNativePG cluster").
+								Value(&clusterName).
+								Validate(func(s string) error {
+									if strings.TrimSpace(s) == "" {
+										return errors.New("cluster name is required")
+									}
+									return nil
+								}),
+							huh.NewInput().
+								Title("Local Port").
+								Description("Port on your local machine to bind to").
+								Value(&localPortStr).
+								Validate(func(s string) error {
+									p, err := strconv.Atoi(s)
+									if err != nil || p < 1 || p > 65535 {
+										return errors.New("must be a valid port number (1-65535)")
+									}
+									return nil
+								}),
+							huh.NewConfirm().
+								Title("Establish Tunnel?").
+								Description("This will bind localhost:<port> to the remote primary database instance.").
+								Value(&confirm),
+						),
+					)
+
+					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+						if !confirm {
+							return func() tea.Msg { return actions.ResultMsg{Output: "Tunnel cancelled."} }
+						}
+						localPort, _ := strconv.Atoi(localPortStr)
+						return actions.OpsCNPGTunnel(clusterName, namespace, localPort)
 					}))
 				},
 			},
@@ -3339,3 +3415,94 @@ func buildSecurityVaultNode() MenuNode {
 		},
 	}
 }
+
+func triggerCNPGRestoreForm(namespace, sourceCluster, timeStr string) tea.Cmd {
+	targetCluster := sourceCluster + "-pitr"
+	force := false
+	var confirm bool
+
+	f := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Namespace").
+				Description("Namespace of the cluster").
+				Value(&namespace).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return errors.New("namespace is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Source Cluster Name").
+				Description("Name of the cluster to recover").
+				Value(&sourceCluster).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return errors.New("source cluster name is required")
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Target Recovery Time").
+				Description("UTC timestamp format: YYYY-MM-DD HH:MM:SS or RFC3339").
+				Value(&timeStr).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return errors.New("target time is required")
+					}
+					_, err := cluster.ParseTargetTime(s)
+					if err != nil {
+						return fmt.Errorf("invalid time: %w", err)
+					}
+					return nil
+				}),
+			huh.NewInput().
+				Title("Target Cluster Name").
+				Description("Name for the recovered cluster").
+				Value(&targetCluster).
+				Validate(func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return errors.New("target cluster name is required")
+					}
+					return nil
+				}),
+			huh.NewConfirm().
+				Title("Overwrite Active Cluster? (In-Place Restore)").
+				Description("If yes, deletes active cluster & PVCs first. Target Name is ignored.").
+				Value(&force),
+			huh.NewConfirm().
+				Title("Proceed with Restore?").
+				Value(&confirm),
+		),
+	)
+
+	return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+		if !confirm {
+			return func() tea.Msg { return actions.ResultMsg{Output: "Restoration cancelled."} }
+		}
+
+		if force {
+			var confirmInput string
+			fConfirm := huh.NewForm(
+				huh.NewGroup(
+					huh.NewInput().
+						Title(fmt.Sprintf("⚠️ DANGER: In-place restore will DELETE cluster %q and all its data. Type the cluster name to confirm:", sourceCluster)).
+						Value(&confirmInput).
+						Validate(func(s string) error {
+							if s != sourceCluster {
+								return fmt.Errorf("must type %q exactly", sourceCluster)
+							}
+							return nil
+						}),
+				),
+			)
+			return engine.Push(NewFormModel(fConfirm, func(form *huh.Form) tea.Cmd {
+				return actions.OpsRestoreCNPGCluster(sourceCluster, sourceCluster, namespace, timeStr, true)
+			}))
+		}
+
+		return actions.OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr, false)
+	}))
+}
+

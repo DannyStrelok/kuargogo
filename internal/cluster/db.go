@@ -3,6 +3,7 @@ package cluster
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -345,3 +346,24 @@ func (m *Manager) DeleteCNPGCluster(masterIP, namespace, clusterName string) err
 
 	return nil
 }
+
+// GetCNPGAppUserPassword retrieves the decrypted password of the application user for the CNPG cluster via SSH.
+func (m *Manager) GetCNPGAppUserPassword(masterIP, namespace, clusterName string) (string, error) {
+	if m.DryRun {
+		return "dummy-dryrun-password", nil
+	}
+
+	cmd := fmt.Sprintf("sudo k3s kubectl get secret %s-app -n %s -o jsonpath='{.data.password}' | base64 -d", clusterName, namespace)
+	executor, err := m.getExecutor()
+	if err != nil {
+		return "", err
+	}
+
+	out, err := executor.ExecuteCommand(masterIP, m.Port, cmd)
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve db password: %w", err)
+	}
+
+	return strings.TrimSpace(out), nil
+}
+

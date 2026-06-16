@@ -79,6 +79,61 @@ func (tm *TunnelManager) StartGrafanaTunnel(ctx context.Context, localPort int) 
 	return nil
 }
 
+// StartCNPGTunnel starts an SSH tunnel to the CNPG database service on the master node.
+func (tm *TunnelManager) StartCNPGTunnel(ctx context.Context, localPort int, namespace, clusterName string) error {
+	cfg := config.GetConfig()
+
+	// Find the first master node
+	var masterIP, masterUser string
+	for _, n := range cfg.Nodes {
+		if n.Role == "master" || n.Role == "control-plane" {
+			masterIP = n.IP
+			masterUser = n.User
+			break
+		}
+	}
+
+	if masterIP == "" {
+		return fmt.Errorf("no master node found in configuration")
+	}
+	if masterUser == "" {
+		masterUser = "kgg-admin"
+	}
+
+	keyPath, err := cfg.SSH.ExpandedKeyPath()
+	if err != nil {
+		return fmt.Errorf("failed to get SSH key path: %w", err)
+	}
+
+	// We forward the localPort to remote port 5432 where kubectl port-forward listens.
+	remoteCommand := fmt.Sprintf("sudo k3s kubectl port-forward -n %s svc/%s-rw 5432:5432 --address 0.0.0.0", namespace, clusterName)
+
+	sshCmd := []string{
+		"-o", "StrictHostKeyChecking=no",
+		"-i", keyPath,
+		"-L", fmt.Sprintf("%d:localhost:5432", localPort),
+		fmt.Sprintf("%s@%s", masterUser, masterIP),
+		remoteCommand,
+	}
+
+	_, _ = fmt.Fprintf(tm.Output, "🔌 Establishing secure tunnel to database %s-rw in namespace %s...\n", clusterName, namespace)
+
+	cmd := exec.CommandContext(ctx, "ssh", sshCmd...)
+
+	err = cmd.Start()
+	if err != nil {
+		return fmt.Errorf("failed to start SSH tunnel: %w", err)
+	}
+
+	time.Sleep(2 * time.Second)
+	if cmd.ProcessState != nil && cmd.ProcessState.Exited() {
+		return fmt.Errorf("tunnel exited prematurely")
+	}
+
+	_, _ = fmt.Fprintf(tm.Output, "✅ Database tunnel active on localhost:%d\n", localPort)
+	return nil
+}
+
 // OpenBrowser opens the specified URL in the default browser.
 // Supports Windows, macOS and Linux transparently.
 func OpenBrowser(url string) error {
