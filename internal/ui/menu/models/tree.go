@@ -2148,6 +2148,10 @@ func buildConfigNode() MenuNode {
 										huh.NewInput().Title("Region").Value(&bk.S3Region),
 										huh.NewInput().Title("Access Key").Value(&accessStr),
 										huh.NewInput().Title("Secret Key").EchoMode(huh.EchoModePassword).Value(&secretStr),
+										huh.NewConfirm().
+											Title("Read Only Mode").
+											Description("If enabled, prevents writing backups from this cluster").
+											Value(&bk.ReadOnly),
 									),
 								)
 								return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {

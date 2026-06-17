@@ -326,26 +326,26 @@ func OpsCNPGTunnel(clusterName, namespace string, localPort int) tea.Cmd {
 				keyPath, err := cfg.SSH.ExpandedKeyPath()
 				if err == nil {
 					mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, false)
-					password, err := mgr.GetCNPGAppUserPassword(master.IP, namespace, clusterName)
+					creds, err := mgr.GetCNPGCredentials(master.IP, namespace, clusterName)
 					if err == nil {
 						_, _ = writer.Write([]byte("\n🔐 DATABASE CREDENTIALS (App User):\n"))
-						_, _ = writer.Write([]byte(fmt.Sprintf("   Host:      localhost\n")))
-						_, _ = writer.Write([]byte(fmt.Sprintf("   Port:      %d\n", localPort)))
-						_, _ = writer.Write([]byte(fmt.Sprintf("   User:      app\n")))
-						_, _ = writer.Write([]byte(fmt.Sprintf("   Password:  %s\n\n", password)))
+						_, _ = fmt.Fprintf(writer, "   Host:      localhost\n")
+						_, _ = fmt.Fprintf(writer, "   Port:      %d\n", localPort)
+						_, _ = fmt.Fprintf(writer, "   User:      %s\n", creds.Username)
+						_, _ = fmt.Fprintf(writer, "   Password:  %s\n\n", creds.Password)
 					}
 				}
 			} else {
 				_, _ = writer.Write([]byte("\n🔐 DATABASE CREDENTIALS (App User - [DRY RUN]):\n"))
-				_, _ = writer.Write([]byte(fmt.Sprintf("   Host:      localhost\n")))
-				_, _ = writer.Write([]byte(fmt.Sprintf("   Port:      %d\n", localPort)))
-				_, _ = writer.Write([]byte(fmt.Sprintf("   User:      app\n")))
-				_, _ = writer.Write([]byte(fmt.Sprintf("   Password:  dummy-dryrun-password\n\n")))
+				_, _ = fmt.Fprintf(writer, "   Host:      localhost\n")
+				_, _ = fmt.Fprintf(writer, "   Port:      %d\n", localPort)
+				_, _ = fmt.Fprintf(writer, "   User:      app\n")
+				_, _ = fmt.Fprintf(writer, "   Password:  dummy-dryrun-password\n\n")
 			}
 
 			err := tm.StartCNPGTunnel(ctx, localPort, namespace, clusterName)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Failed starting tunnel: %v", err)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Failed starting tunnel: %v", err)
 				return
 			}
 
@@ -360,5 +360,3 @@ func OpsCNPGTunnel(clusterName, namespace string, localPort int) tea.Cmd {
 		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
-
-

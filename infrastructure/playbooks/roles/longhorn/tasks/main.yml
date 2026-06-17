@@ -44,12 +44,15 @@
         namespace: longhorn-system
       value: "{{ item.value }}"
   loop:
-    - { name: "storage-over-provisioning-percentage", value: "100" }
+    - { name: "storage-over-provisioning-percentage", value: "300" }
     - { name: "storage-minimal-available-percentage", value: "20" }
-    - { name: "guaranteed-engine-cpu", value: "2" }
     - { name: "default-replica-count", value: "3" }
     - { name: "auto-salvage", value: "true" }
-    - { name: "node-down-pod-deletion-policy", value: "delete-both-statefulset-and-deployment-pod" }
+    - { name: "replica-soft-anti-affinity", value: "true" }
+    - {
+        name: "node-down-pod-deletion-policy",
+        value: "delete-both-statefulset-and-deployment-pod",
+      }
   register: longhorn_settings
   until: longhorn_settings is not failed
   retries: 10

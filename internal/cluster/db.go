@@ -1,9 +1,9 @@
 package cluster
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -59,17 +59,46 @@ func ParseTargetTime(timeStr string) (time.Time, error) {
 
 // GeneratePITRManifest generates the recovery Cluster YAML/JSON manifest by copying the source cluster's spec.
 func GeneratePITRManifest(sourceClusterMap map[string]interface{}, targetName string, targetTime time.Time) (string, error) {
+	metadata, ok := sourceClusterMap["metadata"].(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("invalid source cluster manifest metadata")
+	}
+	sourceName, ok := metadata["name"].(string)
+	if !ok || sourceName == "" {
+		return "", fmt.Errorf("source cluster name is missing in metadata")
+	}
+
 	spec, ok := sourceClusterMap["spec"].(map[string]interface{})
 	if !ok {
 		return "", fmt.Errorf("invalid source cluster manifest structure")
 	}
 
-	backup, ok := spec["backup"].(map[string]interface{})
-	if !ok || backup == nil || backup["barmanObjectStore"] == nil {
-		return "", fmt.Errorf("source cluster does not have backup.barmanObjectStore configured")
+	// Check if Barman Cloud Plugin is used
+	var barmanObjectName string
+	if plugins, ok := spec["plugins"].([]interface{}); ok {
+		for _, p := range plugins {
+			if pMap, ok := p.(map[string]interface{}); ok {
+				if pMap["name"] == "barman-cloud.cloudnative-pg.io" {
+					if params, ok := pMap["parameters"].(map[string]interface{}); ok {
+						if name, ok := params["barmanObjectName"].(string); ok {
+							barmanObjectName = name
+							break
+						}
+					}
+				}
+			}
+		}
 	}
 
-	barmanStore := backup["barmanObjectStore"].(map[string]interface{})
+	var barmanStore map[string]interface{}
+	if barmanObjectName == "" {
+		// Fallback to legacy backup.barmanObjectStore
+		backup, ok := spec["backup"].(map[string]interface{})
+		if !ok || backup == nil || backup["barmanObjectStore"] == nil {
+			return "", fmt.Errorf("source cluster does not have barman cloud plugin or backup.barmanObjectStore configured")
+		}
+		barmanStore, _ = backup["barmanObjectStore"].(map[string]interface{})
+	}
 
 	// Deep copy the original spec via JSON marshal/unmarshal
 	specBytes, err := json.Marshal(spec)
@@ -92,13 +121,36 @@ func GeneratePITRManifest(sourceClusterMap map[string]interface{}, targetName st
 		},
 	}
 
-	// Configure external clusters pointing to the same barman store
-	newSpec["externalClusters"] = []map[string]interface{}{
-		{
+	// Configure external clusters pointing to the same barman store or plugin
+	var extCluster map[string]interface{}
+	if barmanObjectName != "" {
+		extCluster = map[string]interface{}{
+			"name": targetName + "-recovery-source",
+			"plugin": map[string]interface{}{
+				"name": "barman-cloud.cloudnative-pg.io",
+				"parameters": map[string]interface{}{
+					"barmanObjectName": barmanObjectName,
+					"serverName":       sourceName, // Reference backups under the original source name
+				},
+			},
+		}
+	} else {
+		// Deep copy or clone barmanStore to avoid mutating the original
+		storeBytes, _ := json.Marshal(barmanStore)
+		var copiedStore map[string]interface{}
+		_ = json.Unmarshal(storeBytes, &copiedStore)
+
+		if copiedStore["serverName"] == nil || copiedStore["serverName"] == "" {
+			copiedStore["serverName"] = sourceName
+		}
+
+		extCluster = map[string]interface{}{
 			"name":              targetName + "-recovery-source",
-			"barmanObjectStore": barmanStore,
-		},
+			"barmanObjectStore": copiedStore,
+		}
 	}
+
+	newSpec["externalClusters"] = []map[string]interface{}{extCluster}
 
 	// Construct the final unstructured Cluster map
 	recoveryManifest := map[string]interface{}{
@@ -347,23 +399,109 @@ func (m *Manager) DeleteCNPGCluster(masterIP, namespace, clusterName string) err
 	return nil
 }
 
-// GetCNPGAppUserPassword retrieves the decrypted password of the application user for the CNPG cluster via SSH.
-func (m *Manager) GetCNPGAppUserPassword(masterIP, namespace, clusterName string) (string, error) {
+// CNPGCredentials contains the database credentials.
+type CNPGCredentials struct {
+	Username string
+	Password string
+}
+
+// GetCNPGCredentials retrieves the database credentials for a given cluster.
+// It checks managed roles first, falls back to <clusterName>-app, and finally to <clusterName>-superuser.
+func (m *Manager) GetCNPGCredentials(masterIP, namespace, clusterName string) (*CNPGCredentials, error) {
 	if m.DryRun {
-		return "dummy-dryrun-password", nil
+		return &CNPGCredentials{Username: "app", Password: "dummy-dryrun-password"}, nil
 	}
 
-	cmd := fmt.Sprintf("sudo k3s kubectl get secret %s-app -n %s -o jsonpath='{.data.password}' | base64 -d", clusterName, namespace)
+	// 1. Try to fetch the cluster specification to look for managed roles
+	clusterMap, err := m.GetCNPGCluster(masterIP, namespace, clusterName)
+	if err == nil {
+		if spec, ok := clusterMap["spec"].(map[string]interface{}); ok {
+			if managed, ok := spec["managed"].(map[string]interface{}); ok {
+				if roles, ok := managed["roles"].([]interface{}); ok {
+					for _, r := range roles {
+						if rMap, ok := r.(map[string]interface{}); ok {
+							login, _ := rMap["login"].(bool)
+							if login {
+								if pwSec, ok := rMap["passwordSecret"].(map[string]interface{}); ok {
+									if secName, ok := pwSec["name"].(string); ok && secName != "" {
+										creds, secErr := m.fetchSecretCredentials(masterIP, namespace, secName)
+										if secErr == nil {
+											if creds.Username == "" {
+												if roleName, ok := rMap["name"].(string); ok {
+													creds.Username = roleName
+												}
+											}
+											return creds, nil
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Try default <clusterName>-app secret
+	appSecretName := fmt.Sprintf("%s-app", clusterName)
+	creds, err := m.fetchSecretCredentials(masterIP, namespace, appSecretName)
+	if err == nil {
+		return creds, nil
+	}
+
+	// 3. Fall back to <clusterName>-superuser secret
+	superSecretName := fmt.Sprintf("%s-superuser", clusterName)
+	creds, err = m.fetchSecretCredentials(masterIP, namespace, superSecretName)
+	if err == nil {
+		return creds, nil
+	}
+
+	return nil, fmt.Errorf("failed to retrieve database credentials for cluster %s: %w", clusterName, err)
+}
+
+func (m *Manager) fetchSecretCredentials(masterIP, namespace, secretName string) (*CNPGCredentials, error) {
+	cmd := fmt.Sprintf("sudo k3s kubectl get secret %s -n %s -o json", secretName, namespace)
 	executor, err := m.getExecutor()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	out, err := executor.ExecuteCommand(masterIP, m.Port, cmd)
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve db password: %w", err)
+		return nil, err
 	}
 
-	return strings.TrimSpace(out), nil
+	var sec struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(out), &sec); err != nil {
+		return nil, fmt.Errorf("failed to parse secret JSON: %w", err)
+	}
+
+	var username, password string
+	if uEncoded, ok := sec.Data["username"]; ok {
+		uDecoded, err := base64.StdEncoding.DecodeString(uEncoded)
+		if err == nil {
+			username = string(uDecoded)
+		}
+	} else if uEncoded, ok := sec.Data["user"]; ok {
+		uDecoded, err := base64.StdEncoding.DecodeString(uEncoded)
+		if err == nil {
+			username = string(uDecoded)
+		}
+	}
+
+	if pEncoded, ok := sec.Data["password"]; ok {
+		pDecoded, err := base64.StdEncoding.DecodeString(pEncoded)
+		if err == nil {
+			password = string(pDecoded)
+		}
+	}
+
+	return &CNPGCredentials{
+		Username: username,
+		Password: password,
+	}, nil
 }
 

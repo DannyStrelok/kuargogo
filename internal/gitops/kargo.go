@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/DannyStrelok/kuargogo/internal/config"
+	"github.com/DannyStrelok/kuargogo/internal/provision"
 )
 
 // KargoStageSnapshot represents a stage status snapshot
@@ -118,6 +120,75 @@ func NewKargoService(kubeconfig string, dryRun bool) *KargoService {
 	}
 }
 
+func (s *KargoService) shouldUseSSH() bool {
+	if s.Kubeconfig == "" {
+		return true
+	}
+	if _, err := os.Stat(s.Kubeconfig); os.IsNotExist(err) {
+		return true
+	}
+	if _, err := exec.LookPath("kubectl"); err != nil {
+		return true
+	}
+	return false
+}
+
+func (s *KargoService) executeKubectl(ctx context.Context, args []string, stdin string) (string, error) {
+	if s.shouldUseSSH() {
+		cfg := config.GetConfig()
+		var master *config.Node
+		for _, n := range cfg.Nodes {
+			if n.Role == "master" || n.Role == "control-plane" {
+				master = &n
+				break
+			}
+		}
+		if master == nil {
+			return "", fmt.Errorf("no master node found in configuration for SSH execution fallback")
+		}
+
+		keyPath, err := config.ResolveKeyPath("")
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve SSH key path: %w", err)
+		}
+
+		executor, err := provision.NewExecutor(master.User, keyPath, s.DryRun)
+		if err != nil {
+			return "", fmt.Errorf("failed to create SSH executor: %w", err)
+		}
+
+		var cmdStr string
+		if stdin != "" {
+			cmdStr = fmt.Sprintf("sudo k3s kubectl %s -f - << 'EOF'\n%s\nEOF", strings.Join(args, " "), stdin)
+		} else {
+			cmdStr = fmt.Sprintf("sudo k3s kubectl %s", strings.Join(args, " "))
+		}
+
+		return executor.ExecuteCommand(master.IP, cfg.SSH.Port, cmdStr)
+	}
+
+	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	var cmd *exec.Cmd
+	if stdin != "" {
+		cmd = exec.CommandContext(execCtx, "kubectl", append([]string{"--kubeconfig", s.Kubeconfig}, args...)...)
+		cmd.Stdin = strings.NewReader(stdin)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	} else {
+		cmd = exec.CommandContext(execCtx, "kubectl", append([]string{"--kubeconfig", s.Kubeconfig}, args...)...)
+		out, err := cmd.Output()
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				return string(out), fmt.Errorf("%w: %s", err, string(exitErr.Stderr))
+			}
+			return string(out), err
+		}
+		return string(out), nil
+	}
+}
+
 // Promote triggers a Kargo stage promotion by creating a Promotion CRD.
 func (s *KargoService) Promote(ctx context.Context, namespace, stageName, freightID string) (string, error) {
 	promotionYAML := fmt.Sprintf(`
@@ -135,18 +206,12 @@ spec:
 		return fmt.Sprintf("🧪 [DRY RUN] Promotion manifest generated:\n%s", promotionYAML), nil
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(execCtx, "kubectl", "--kubeconfig", s.Kubeconfig, "create", "-f", "-")
-	cmd.Stdin = strings.NewReader(promotionYAML)
-
-	out, err := cmd.CombinedOutput()
+	out, err := s.executeKubectl(ctx, []string{"create"}, promotionYAML)
 	if err != nil {
-		return string(out), fmt.Errorf("kubectl create promotion: %w\n%s", err, string(out))
+		return out, fmt.Errorf("kubectl create promotion: %w\n%s", err, out)
 	}
 
-	return string(out), nil
+	return out, nil
 }
 
 // GetFreight lists available freight IDs in the specified namespace.
@@ -155,16 +220,12 @@ func (s *KargoService) GetFreight(ctx context.Context, namespace string) ([]stri
 		return []string{"freight-dryrun-1", "freight-dryrun-2"}, nil
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(execCtx, "kubectl", "--kubeconfig", s.Kubeconfig, "get", "freight", "-n", namespace, "-o", "custom-columns=NAME:.metadata.name", "--no-headers")
-	out, err := cmd.CombinedOutput()
+	out, err := s.executeKubectl(ctx, []string{"get", "freight", "-n", namespace, "-o", "custom-columns=NAME:.metadata.name", "--no-headers"}, "")
 	if err != nil {
-		return nil, fmt.Errorf("kubectl get freight: %w\n%s", err, string(out))
+		return nil, fmt.Errorf("kubectl get freight: %w\n%s", err, out)
 	}
 
-	rawLines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	rawLines := strings.Split(strings.TrimSpace(out), "\n")
 	var freight []string
 	for _, line := range rawLines {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
@@ -226,17 +287,13 @@ func (s *KargoService) QueryObservability(ctx context.Context, pipelineName stri
 	}
 
 	// 1. Fetch Freights
-	execCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(execCtx, "kubectl", "--kubeconfig", s.Kubeconfig, "get", "freight", "-n", ns, "-o", "json")
-	freightBytes, err := cmd.Output()
+	freightOut, err := s.executeKubectl(ctx, []string{"get", "freight", "-n", ns, "-o", "json"}, "")
 	if err != nil {
 		return PipelineObservabilitySnapshot{}, fmt.Errorf("failed to fetch Kargo Freight: %w", err)
 	}
 
 	var fList k8sFreightList
-	if err := json.Unmarshal(freightBytes, &fList); err != nil {
+	if err := json.Unmarshal([]byte(freightOut), &fList); err != nil {
 		return PipelineObservabilitySnapshot{}, fmt.Errorf("failed to parse Kargo Freight JSON: %w", err)
 	}
 
@@ -260,14 +317,13 @@ func (s *KargoService) QueryObservability(ctx context.Context, pipelineName stri
 	stageCtx, stageCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer stageCancel()
 
-	cmd = exec.CommandContext(stageCtx, "kubectl", "--kubeconfig", s.Kubeconfig, "get", "stage", "-n", ns, "-o", "json")
-	stageBytes, err := cmd.Output()
+	stageOut, err := s.executeKubectl(stageCtx, []string{"get", "stage", "-n", ns, "-o", "json"}, "")
 	if err != nil {
 		return PipelineObservabilitySnapshot{}, fmt.Errorf("failed to fetch Kargo Stages: %w", err)
 	}
 
 	var sList k8sStageList
-	if err := json.Unmarshal(stageBytes, &sList); err != nil {
+	if err := json.Unmarshal([]byte(stageOut), &sList); err != nil {
 		return PipelineObservabilitySnapshot{}, fmt.Errorf("failed to parse Kargo Stage JSON: %w", err)
 	}
 
@@ -280,12 +336,11 @@ func (s *KargoService) QueryObservability(ctx context.Context, pipelineName stri
 	argoCtx, argoCancel := context.WithTimeout(ctx, 15*time.Second)
 	defer argoCancel()
 
-	cmd = exec.CommandContext(argoCtx, "kubectl", "--kubeconfig", s.Kubeconfig, "get", "application", "-n", "argocd", "-o", "json")
-	argoBytes, err := cmd.Output()
+	argoOut, err := s.executeKubectl(argoCtx, []string{"get", "application", "-n", "argocd", "-o", "json"}, "")
 	var argoList k8sArgoAppList
 	argoFetched := false
 	if err == nil {
-		if json.Unmarshal(argoBytes, &argoList) == nil {
+		if json.Unmarshal([]byte(argoOut), &argoList) == nil {
 			argoFetched = true
 		}
 	}

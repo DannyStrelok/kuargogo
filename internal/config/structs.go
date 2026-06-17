@@ -283,6 +283,7 @@ type Backup struct {
 	S3Region    string `mapstructure:"s3_region" yaml:"s3_region"`
 	S3AccessKey Secret `mapstructure:"s3_access_key" yaml:"s3_access_key"`
 	S3SecretKey Secret `mapstructure:"s3_secret_key" yaml:"s3_secret_key"`
+	ReadOnly    bool   `mapstructure:"readonly" yaml:"readonly,omitempty"`
 }
 
 // Network holds switch credentials and connection details

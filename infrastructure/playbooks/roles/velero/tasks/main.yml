@@ -45,6 +45,7 @@
             provider: "{{ velero_provider }}"
             bucket: "{{ velero_s3_bucket }}"
             prefix: "{{ velero_s3_prefix }}"
+            accessMode: "{{ 'ReadOnly' if velero_s3_readonly | default(false) else 'ReadWrite' }}"
             config:
               region: "{{ velero_s3_region }}"
               s3Url: "{{ velero_s3_url }}"

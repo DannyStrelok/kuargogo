@@ -52,6 +52,7 @@ async def cb_kargo(ctx, query: CallbackQuery, state: FSMContext):
     data = query.data.replace("kargo_", "")
 
     if data == "menu":
+        await query.message.edit_text("⏳ <b>Fetching Kargo pipelines...</b>")
         # Back to pipeline list
         success, out, err = await run_kgg_cmd(["kargo", "pipelines"])
         if not success:

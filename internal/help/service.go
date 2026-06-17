@@ -98,6 +98,12 @@ func NewService() *Service {
 				Description: "Step-by-step workflow to deploy new microservices with Kargo and ArgoCD",
 				Filename:    "docs/10-new-project-guide.md",
 			},
+			{
+				ID:          "11-k9s-cluster-management",
+				Title:       "☸️ K9s Cluster Management Guide",
+				Description: "Master the command-line TUI to navigate, debug and manage your k3s cluster",
+				Filename:    "docs/11-k9s-cluster-management.md",
+			},
 		},
 	}
 }

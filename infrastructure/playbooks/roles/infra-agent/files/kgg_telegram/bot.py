@@ -110,7 +110,6 @@ class RackBot:
         self.dp.message(F.text == "⛵ GitOps")(partial(handle_gitops_menu, ctx))
         self.dp.message(F.text == "💾 Storage")(partial(handle_storage_menu, ctx))
         self.dp.message(F.text == "☁️ Cloud")(partial(handle_cloud_menu, ctx))
-        self.dp.message(F.text == "🚢 Kargo")(partial(handle_kargo_menu, ctx))
         self.dp.message(Command("kargo"))(partial(handle_kargo_menu, ctx))
         self.dp.message(Command("panic"))(partial(handle_panic_menu, ctx))
 
@@ -176,7 +175,7 @@ class RackBot:
                 [types.KeyboardButton(text="💻 SSH Console"), types.KeyboardButton(text="🐳 K3s Ops")],
                 [types.KeyboardButton(text="📂 Files"), types.KeyboardButton(text="📡 Network")],
                 [types.KeyboardButton(text="🛠 Maint"), types.KeyboardButton(text="📋 Incidents")],
-                [types.KeyboardButton(text="⛵ GitOps"), types.KeyboardButton(text="🚢 Kargo"), types.KeyboardButton(text="💾 Storage")],
+                [types.KeyboardButton(text="⛵ GitOps"), types.KeyboardButton(text="💾 Storage")],
                 [types.KeyboardButton(text="☁️ Cloud"), types.KeyboardButton(text="❓ Help")]
             ],
             resize_keyboard=True
@@ -184,10 +183,26 @@ class RackBot:
 
         nodes_list = ", ".join([n["name"] for n in self.nodes])
         help_text = (
-            "🖥 <b>Kuargogo Control</b>\n\n"
-            "Use the buttons below to manage your rack. For node-specific actions, "
-            "press a button and then select the node.\n\n"
-            f"📡 <b>Active Nodes:</b> {nodes_list}"
+            "🖥 <b>Kuargogo Control - Guía de Funciones</b>\n\n"
+            "Usa el teclado inferior para gestionar tu rack. A continuación se detallan las funciones de cada sección:\n\n"
+            "📊 <b>Status:</b> Muestra un resumen rápido del estado del clúster (CPU, RAM, disco y carga de red) para todos los nodos.\n\n"
+            "🩺 <b>Health:</b> Diagnósticos de salud:\n"
+            "  • <i>Global AI Heartbeat:</i> Obtiene el pulso del clúster con análisis de IA y sugerencias de reparación automatizadas.\n"
+            "  • <i>Node Hardware Health:</i> Inspección directa de hardware por nodo (temperatura real de CPU, SMART NVMe, desgaste, AppArmor e iSCSI).\n\n"
+            "📝 <b>Logs:</b> Monitorización de registros. Permite ver o seguir en tiempo real (tail) los logs del bot, agente u otros servicios.\n\n"
+            "⚡ <b>Power:</b> Encendido y apagado. Permite encender nodos apagados mediante Wake-on-LAN (WoL), apagar de forma segura o forzar reinicios.\n\n"
+            "💻 <b>SSH Console:</b> Consola segura. Ejecuta comandos de shell directos en cualquiera de los servidores del clúster.\n\n"
+            "🐳 <b>K3s Ops:</b> Gestión de Kubernetes. Permite reiniciar o cambiar el número de réplicas de tus Pods y Deployments interactivamente.\n\n"
+            "📂 <b>Files:</b> Navegador de ficheros. Inspecciona las carpetas de configuración locales del bot y del agente.\n\n"
+            "📡 <b>Network:</b> Diagnósticos cruzados de red (ping/iperf3) y visualización del estado de los túneles y DNS de Cloudflare.\n\n"
+            "🛠 <b>Maint:</b> Mantenimiento de servidores:\n"
+            "  • <i>🏥 Generate Diagnostic Report:</i> Ejecuta la herramienta de diagnóstico general (kgg doctor) de CPU, memoria, carga y uptime para todos los nodos.\n"
+            "  • <i>Update System Packages:</i> Ejecuta playbooks de Ansible para actualizar y parchear paquetes del sistema operativo en todo el rack.\n\n"
+            "📋 <b>Incidents:</b> Registro histórico de incidencias. Muestra las alertas críticas y eventos del clúster de las últimas horas.\n\n"
+            "⛵ <b>GitOps:</b> Gestión de despliegues: listado y reconciliación de aplicaciones en ArgoCD, y promociones visuales de pipelines de Kargo.\n\n"
+            "💾 <b>Storage:</b> Disaster Recovery. Crea backups del sistema completo (Velero) o copias en caliente de bases de datos CNPG hacia R2/S3.\n\n"
+            "☁️ <b>Cloud:</b> Sincronización en la nube para subidas rápidas y backups externos encriptados de la configuración.\n\n"
+            f"📡 <b>Nodos Activos:</b> <code>{nodes_list}</code>"
         )
 
         if message.text and message.text.startswith("/start"):

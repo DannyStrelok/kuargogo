@@ -167,8 +167,13 @@ func TestGeneratePITRManifest(t *testing.T) {
 	barmanStore, ok := ext["barmanObjectStore"].(map[string]interface{})
 	if !ok {
 		t.Errorf("Expected barmanObjectStore to be present in external cluster")
-	} else if barmanStore["destinationPath"] != "s3://homelab-clandestino/barman" {
-		t.Errorf("Expected barmanObjectStore destination path to be correct, got %v", barmanStore["destinationPath"])
+	} else {
+		if barmanStore["destinationPath"] != "s3://homelab-clandestino/barman" {
+			t.Errorf("Expected barmanObjectStore destination path to be correct, got %v", barmanStore["destinationPath"])
+		}
+		if barmanStore["serverName"] != "clandestino-db" {
+			t.Errorf("Expected barmanObjectStore serverName to be 'clandestino-db', got %v", barmanStore["serverName"])
+		}
 	}
 }
 
@@ -185,7 +190,72 @@ func TestGeneratePITRManifestNoBarman(t *testing.T) {
 	}
 
 	_, err := GeneratePITRManifest(invalidClusterRaw, "fail-target", time.Now())
-	if err == nil || !strings.Contains(err.Error(), "barmanObjectStore") {
-		t.Errorf("Expected error indicating lack of barmanObjectStore, got: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "barman cloud plugin") {
+		t.Errorf("Expected error indicating lack of barman cloud plugin, got: %v", err)
+	}
+}
+
+func TestGeneratePITRManifestPlugin(t *testing.T) {
+	sourceClusterRaw := map[string]interface{}{
+		"apiVersion": "postgresql.cnpg.io/v1",
+		"kind":       "Cluster",
+		"metadata": map[string]interface{}{
+			"name":      "clandestino-db",
+			"namespace": "clandestino-dev",
+		},
+		"spec": map[string]interface{}{
+			"instances": 3,
+			"imageName": "ghcr.io/cloudnative-pg/postgresql:18",
+			"plugins": []interface{}{
+				map[string]interface{}{
+					"name": "barman-cloud.cloudnative-pg.io",
+					"parameters": map[string]interface{}{
+						"barmanObjectName": "clandestino-db-backup-store",
+					},
+				},
+			},
+		},
+	}
+
+	targetName := "clandestino-db-pitr"
+	targetTime := time.Date(2026, 6, 12, 18, 0, 0, 0, time.UTC)
+
+	manifestJSON, err := GeneratePITRManifest(sourceClusterRaw, targetName, targetTime)
+	if err != nil {
+		t.Fatalf("GeneratePITRManifest failed with plugin: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(manifestJSON), &parsed); err != nil {
+		t.Fatalf("Failed to parse generated manifest: %v", err)
+	}
+
+	spec, ok := parsed["spec"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Spec block missing in recovery manifest")
+	}
+
+	// Verify externalClusters section contains plugin
+	externalClusters, ok := spec["externalClusters"].([]interface{})
+	if !ok || len(externalClusters) != 1 {
+		t.Fatalf("Expected exactly 1 external cluster, got %+v", spec["externalClusters"])
+	}
+	ext := externalClusters[0].(map[string]interface{})
+	if ext["name"] != targetName+"-recovery-source" {
+		t.Errorf("Expected external cluster name to match recovery source")
+	}
+	plugin, ok := ext["plugin"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("Expected plugin object, got %+v", ext["plugin"])
+	}
+	if plugin["name"] != "barman-cloud.cloudnative-pg.io" {
+		t.Errorf("Expected plugin name to be barman-cloud, got %v", plugin["name"])
+	}
+	params, ok := plugin["parameters"].(map[string]interface{})
+	if !ok || params["barmanObjectName"] != "clandestino-db-backup-store" {
+		t.Errorf("Expected barmanObjectName to be 'clandestino-db-backup-store', got %+v", params)
+	}
+	if params["serverName"] != "clandestino-db" {
+		t.Errorf("Expected params serverName to be 'clandestino-db', got %v", params["serverName"])
 	}
 }

@@ -53,6 +53,7 @@ func (tm *TunnelManager) StartGrafanaTunnel(ctx context.Context, localPort int) 
 
 	sshCmd := []string{
 		"-o", "StrictHostKeyChecking=no",
+		"-t", "-t", // Force pseudo-terminal allocation to clean up sudo child processes on hangup
 		"-i", keyPath,
 		"-L", fmt.Sprintf("%d:localhost:3000", localPort),
 		fmt.Sprintf("%s@%s", masterUser, masterIP),
@@ -110,6 +111,7 @@ func (tm *TunnelManager) StartCNPGTunnel(ctx context.Context, localPort int, nam
 
 	sshCmd := []string{
 		"-o", "StrictHostKeyChecking=no",
+		"-t", "-t", // Force pseudo-terminal allocation to clean up sudo child processes on hangup
 		"-i", keyPath,
 		"-L", fmt.Sprintf("%d:localhost:5432", localPort),
 		fmt.Sprintf("%s@%s", masterUser, masterIP),
