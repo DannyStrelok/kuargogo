@@ -36,22 +36,22 @@ func OpsCreateCNPGBackup(clusterName, backupName, namespace string) tea.Cmd {
 
 			keyPath, err := cfg.SSH.ExpandedKeyPath()
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error: %v\n", err)
 				return
 			}
 
 			mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, config.IsDryRun())
 			mgr.Output = writer
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("🚀 Triggering manual backup %q for cluster %q in namespace %q...\n", backupName, clusterName, namespace)))
+			_, _ = fmt.Fprintf(writer, "🚀 Triggering manual backup %q for cluster %q in namespace %q...\n", backupName, clusterName, namespace)
 
 			actualName, err := mgr.CreateCNPGBackup(master.IP, namespace, clusterName, backupName)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error triggering backup: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error triggering backup: %v\n", err)
 				return
 			}
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("✅ Backup CRD %q applied successfully. Monitoring progress...\n", actualName)))
+			_, _ = fmt.Fprintf(writer, "✅ Backup CRD %q applied successfully. Monitoring progress...\n", actualName)
 
 			for {
 				if config.IsDryRun() {
@@ -61,9 +61,9 @@ func OpsCreateCNPGBackup(clusterName, backupName, namespace string) tea.Cmd {
 
 				status, err := mgr.GetCNPGBackupStatus(master.IP, namespace, actualName)
 				if err != nil {
-					_, _ = writer.Write([]byte(fmt.Sprintf("⚠️  Warning checking status: %v\n", err)))
+					_, _ = fmt.Fprintf(writer, "⚠️  Warning checking status: %v\n", err)
 				} else {
-					_, _ = writer.Write([]byte(fmt.Sprintf("Status: %s\n", status)))
+					_, _ = fmt.Fprintf(writer, "Status: %s\n", status)
 					if status == "completed" {
 						_, _ = writer.Write([]byte("\n✅ Backup completed successfully in Cloudflare R2!\n"))
 						break
@@ -106,7 +106,7 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 
 			keyPath, err := cfg.SSH.ExpandedKeyPath()
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error: %v\n", err)
 				return
 			}
 
@@ -116,11 +116,11 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 			// 1. Parse target time first
 			parsedTime, err := cluster.ParseTargetTime(timeStr)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error parsing target time: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error parsing target time: %v\n", err)
 				return
 			}
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("🕒 Target Recovery Time: %s (UTC)\n", parsedTime.Format(time.RFC3339))))
+			_, _ = fmt.Fprintf(writer, "🕒 Target Recovery Time: %s (UTC)\n", parsedTime.Format(time.RFC3339))
 
 			// 2. If force is active, perform safety backups and delete active cluster first
 			if force {
@@ -128,11 +128,11 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 
 				// Trigger last-minute backup
 				preBackupName := fmt.Sprintf("pre-restore-%s", time.Now().Format("20060102-150405"))
-				_, _ = writer.Write([]byte(fmt.Sprintf("💾 Creating safety pre-restore backup: %s...\n", preBackupName)))
+				_, _ = fmt.Fprintf(writer, "💾 Creating safety pre-restore backup: %s...\n", preBackupName)
 
 				actualPreName, backupErr := mgr.CreateCNPGBackup(master.IP, namespace, sourceCluster, preBackupName)
 				if backupErr != nil {
-					_, _ = writer.Write([]byte(fmt.Sprintf("⚠️ Warning: Failed to trigger pre-restore backup: %v. Proceeding anyway...\n", backupErr)))
+					_, _ = fmt.Fprintf(writer, "⚠️ Warning: Failed to trigger pre-restore backup: %v. Proceeding anyway...\n", backupErr)
 				} else {
 					// Wait for safety backup to finish (up to 2 minutes max to not hang the UI indefinitely, or normal completion)
 					timeoutChan := time.After(2 * time.Minute)
@@ -151,9 +151,9 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 							}
 							status, checkErr := mgr.GetCNPGBackupStatus(master.IP, namespace, actualPreName)
 							if checkErr != nil {
-								_, _ = writer.Write([]byte(fmt.Sprintf("⚠️ Warning checking backup: %v\n", checkErr)))
+								_, _ = fmt.Fprintf(writer, "⚠️ Warning checking backup: %v\n", checkErr)
 							} else {
-								_, _ = writer.Write([]byte(fmt.Sprintf("Safety backup status: %s\n", status)))
+								_, _ = fmt.Fprintf(writer, "Safety backup status: %s\n", status)
 								if status == "completed" {
 									_, _ = writer.Write([]byte("✅ Safety backup completed successfully!\n"))
 									break WaitLoop
@@ -168,20 +168,20 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 				}
 
 				// Deleting active cluster
-				_, _ = writer.Write([]byte(fmt.Sprintf("🗑️ Deleting active cluster %q to allow in-place restore...\n", sourceCluster)))
+				_, _ = fmt.Fprintf(writer, "🗑️ Deleting active cluster %q to allow in-place restore...\n", sourceCluster)
 				err = mgr.DeleteCNPGCluster(master.IP, namespace, sourceCluster)
 				if err != nil {
-					_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error deleting active cluster/PVCs: %v\n", err)))
+					_, _ = fmt.Fprintf(writer, "❌ Error deleting active cluster/PVCs: %v\n", err)
 					return
 				}
 				_, _ = writer.Write([]byte("✅ Active cluster and PVCs removed successfully.\n"))
 			}
 
 			// 3. Get original cluster info to inherit spec (e.g. S3 Barman details, instances, parameters)
-			_, _ = writer.Write([]byte(fmt.Sprintf("🔍 Retrieving source cluster %q configuration...\n", sourceCluster)))
+			_, _ = fmt.Fprintf(writer, "🔍 Retrieving source cluster %q configuration...\n", sourceCluster)
 			sourceClusterMap, err := mgr.GetCNPGCluster(master.IP, namespace, sourceCluster)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error fetching source cluster info: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error fetching source cluster info: %v\n", err)
 				return
 			}
 
@@ -189,19 +189,19 @@ func OpsRestoreCNPGCluster(sourceCluster, targetCluster, namespace, timeStr stri
 			_, _ = writer.Write([]byte("⚙️ Generating Point-in-Time Recovery (PITR) manifest...\n"))
 			manifestJSON, err := cluster.GeneratePITRManifest(sourceClusterMap, targetCluster, parsedTime)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error generating manifest: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error generating manifest: %v\n", err)
 				return
 			}
 
 			// 5. Apply manifest
-			_, _ = writer.Write([]byte(fmt.Sprintf("🚀 Applying restored cluster %q in namespace %q...\n", targetCluster, namespace)))
+			_, _ = fmt.Fprintf(writer, "🚀 Applying restored cluster %q in namespace %q...\n", targetCluster, namespace)
 			err = mgr.ApplyCNPGClusterManifest(master.IP, namespace, []byte(manifestJSON))
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error applying manifest: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error applying manifest: %v\n", err)
 				return
 			}
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("\n✅ Recovery cluster %q successfully deployed!\n", targetCluster)))
+			_, _ = fmt.Fprintf(writer, "\n✅ Recovery cluster %q successfully deployed!\n", targetCluster)
 			_, _ = writer.Write([]byte("⏳ The CNPG operator will now provision the nodes and bootstrap data from Cloudflare R2 Barman store.\n"))
 
 			// 6. GitOps warning
@@ -238,14 +238,14 @@ func OpsListCNPGBackups(clusterName, namespace string) tea.Cmd {
 
 			keyPath, err := cfg.SSH.ExpandedKeyPath()
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error: %v\n", err)
 				return
 			}
 
 			mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, config.IsDryRun())
 			mgr.Output = writer
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("🔍 Listing CNPG backups for cluster %q in namespace %q...\n", clusterName, namespace)))
+			_, _ = fmt.Fprintf(writer, "🔍 Listing CNPG backups for cluster %q in namespace %q...\n", clusterName, namespace)
 
 			if config.IsDryRun() {
 				_, _ = writer.Write([]byte("\n💾 [DRY RUN] Backups list:\n"))
@@ -259,7 +259,7 @@ func OpsListCNPGBackups(clusterName, namespace string) tea.Cmd {
 
 			backups, err := mgr.ListCNPGBackups(master.IP, namespace, clusterName)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error listing backups: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error listing backups: %v\n", err)
 				return
 			}
 
@@ -280,10 +280,10 @@ func OpsListCNPGBackups(clusterName, namespace string) tea.Cmd {
 
 			_, _ = writer.Write([]byte("\n💾 AVAILABLE CNPG BACKUPS:\n"))
 			_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
-			_, _ = writer.Write([]byte(fmt.Sprintf("%-50s %-12s %-20s\n", "BACKUP NAME", "STATUS", "CREATED AT")))
+			_, _ = fmt.Fprintf(writer, "%-50s %-12s %-20s\n", "BACKUP NAME", "STATUS", "CREATED AT")
 			_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
 			for _, b := range backups {
-				_, _ = writer.Write([]byte(fmt.Sprintf("%-50s %-12s %-20s\n", b.Name, b.Phase, b.CreatedAt)))
+				_, _ = fmt.Fprintf(writer, "%-50s %-12s %-20s\n", b.Name, b.Phase, b.CreatedAt)
 			}
 			_, _ = writer.Write([]byte("--------------------------------------------------------------------------------\n"))
 		}()

@@ -39,18 +39,24 @@ async def handle_k3s_menu(ctx, message: Message, edit: bool = False):
 
 async def _fetch_deployments(ctx) -> list:
     master = _get_master(ctx.nodes)
-    cmd = "sudo k3s kubectl get deployments -A -o jsonpath='{range .items[*]}{.metadata.namespace}{\"/\"}{.metadata.name}{\"\\n\"}{end}'"
+    cmd = "sudo k3s kubectl get deployments -A -o json"
     success, out, err = await run_kgg_cmd(["ssh", master, cmd])
     if not success or not out:
         return []
     
-    deploys = []
-    for line in out.splitlines():
-        line = line.strip()
-        if "/" in line:
-            ns, name = line.split("/", 1)
-            deploys.append((ns, name))
-    return deploys
+    try:
+        import json
+        data = json.loads(out)
+        deploys = []
+        for item in data.get("items", []):
+            ns = item.get("metadata", {}).get("namespace")
+            name = item.get("metadata", {}).get("name")
+            if ns and name:
+                deploys.append((ns, name))
+        return deploys
+    except Exception as e:
+        logger.error(f"Failed to parse deployments JSON: {e}")
+        return []
 
 
 async def cb_k3s(ctx, callback: CallbackQuery, state: FSMContext):

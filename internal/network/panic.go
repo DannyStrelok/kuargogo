@@ -37,43 +37,43 @@ type k8sResourceList struct {
 func (m *Manager) TriggerPanic(out io.Writer, cfg config.ClusterConfig) error {
 	policy := cfg.Network.PanicPolicy
 
-	fmt.Fprintln(out, "🚨 TRIGGERING HOMELAB PANIC MODE ISOLATION...")
+	_, _ = fmt.Fprintln(out, "🚨 TRIGGERING HOMELAB PANIC MODE ISOLATION...")
 
 	kubeconfig, err := resolveKubeconfigPath(cfg)
 	if err != nil {
-		fmt.Fprintf(out, "⚠️  Could not resolve kubeconfig path: %v\n", err)
+		_, _ = fmt.Fprintf(out, "⚠️  Could not resolve kubeconfig path: %v\n", err)
 	}
 
 	reachable := false
 	if err == nil {
-		fmt.Fprintln(out, "📡 Checking Kubernetes cluster reachability...")
+		_, _ = fmt.Fprintln(out, "📡 Checking Kubernetes cluster reachability...")
 		reachable = isClusterReachable(kubeconfig)
 	}
 
 	if reachable {
-		fmt.Fprintln(out, "✅ Cluster is reachable. Starting software-level isolation...")
+		_, _ = fmt.Fprintln(out, "✅ Cluster is reachable. Starting software-level isolation...")
 
 		// 1. Software / GitOps Isolation
 		if policy.SoftwareIsolation {
-			fmt.Fprintln(out, "   🔒 Freezing GitOps & ArgoCD sync policies...")
+			_, _ = fmt.Fprintln(out, "   🔒 Freezing GitOps & ArgoCD sync policies...")
 			if err := m.freezeArgoCD(out, kubeconfig); err != nil {
-				fmt.Fprintf(out, "   ❌ ArgoCD freeze failed: %v\n", err)
+				_, _ = fmt.Fprintf(out, "   ❌ ArgoCD freeze failed: %v\n", err)
 			} else {
-				fmt.Fprintln(out, "   ✅ ArgoCD sync policies frozen successfully.")
+				_, _ = fmt.Fprintln(out, "   ✅ ArgoCD sync policies frozen successfully.")
 			}
 		}
 
 		// 2. Cloudflare Isolation
 		if policy.CloudflareKill {
-			fmt.Fprintln(out, "   🔒 Disabling Cloudflare Tunnels (scaling to 0 replicas)...")
+			_, _ = fmt.Fprintln(out, "   🔒 Disabling Cloudflare Tunnels (scaling to 0 replicas)...")
 			if err := m.scaleCloudflare(out, kubeconfig, 0); err != nil {
-				fmt.Fprintf(out, "   ❌ Cloudflare Tunnel disable failed: %v\n", err)
+				_, _ = fmt.Fprintf(out, "   ❌ Cloudflare Tunnel disable failed: %v\n", err)
 			} else {
-				fmt.Fprintln(out, "   ✅ Cloudflare Tunnels scaled down to 0.")
+				_, _ = fmt.Fprintln(out, "   ✅ Cloudflare Tunnels scaled down to 0.")
 			}
 		}
 	} else {
-		fmt.Fprintln(out, "⚠️  Cluster is unreachable. Skipping software-level isolation.")
+		_, _ = fmt.Fprintln(out, "⚠️  Cluster is unreachable. Skipping software-level isolation.")
 	}
 
 	// 3. Network Isolation
@@ -82,35 +82,36 @@ func (m *Manager) TriggerPanic(out io.Writer, cfg config.ClusterConfig) error {
 			return fmt.Errorf("network isolation is configured but uplink_port is not set in config")
 		}
 
-		fmt.Fprintln(out, "📡 Connecting to smart switch...")
+		_, _ = fmt.Fprintln(out, "📡 Connecting to smart switch...")
 		if err := m.driver.Connect(); err != nil {
 			return fmt.Errorf("failed to connect to switch: %w", err)
 		}
-		defer m.driver.Close()
+		defer func() { _ = m.driver.Close() }()
 
-		if policy.NetworkIsolation == "shutdown" {
-			fmt.Fprintf(out, "   🔒 Shutting down Uplink port (%s)...\n", cfg.Network.UplinkPort)
+		switch policy.NetworkIsolation {
+		case "shutdown":
+			_, _ = fmt.Fprintf(out, "   🔒 Shutting down Uplink port (%s)...\n", cfg.Network.UplinkPort)
 			if err := m.driver.SetPortState(cfg.Network.UplinkPort, false); err != nil {
 				return fmt.Errorf("failed to shut down uplink port: %w", err)
 			}
-			fmt.Fprintln(out, "   ✅ Uplink port is DOWN.")
-		} else if policy.NetworkIsolation == "vlan" {
+			_, _ = fmt.Fprintln(out, "   ✅ Uplink port is DOWN.")
+		case "vlan":
 			vlan := cfg.Network.QuarantineVLAN
 			if vlan == 0 {
 				vlan = 666 // Default quarantine VLAN
 			}
-			fmt.Fprintf(out, "   🔒 Moving Uplink port (%s) to Quarantine VLAN %d...\n", cfg.Network.UplinkPort, vlan)
+			_, _ = fmt.Fprintf(out, "   🔒 Moving Uplink port (%s) to Quarantine VLAN %d...\n", cfg.Network.UplinkPort, vlan)
 			if err := m.driver.SetPortVLAN(cfg.Network.UplinkPort, vlan); err != nil {
 				return fmt.Errorf("failed to reassign uplink port to quarantine VLAN: %w", err)
 			}
-			fmt.Fprintln(out, "   ✅ Uplink port moved to quarantine VLAN.")
+			_, _ = fmt.Fprintln(out, "   ✅ Uplink port moved to quarantine VLAN.")
 		}
 	} else {
-		fmt.Fprintln(out, "ℹ️  Network-level switch isolation skipped (policy: none/not set).")
+		_, _ = fmt.Fprintln(out, "ℹ️  Network-level switch isolation skipped (policy: none/not set).")
 	}
 
 	if policy.NotifyAdmin {
-		fmt.Fprintln(out, "\n🚨 ADMIN NOTIFICATION: Panic isolation completed successfully. homelab network is isolated.")
+		_, _ = fmt.Fprintln(out, "\n🚨 ADMIN NOTIFICATION: Panic isolation completed successfully. homelab network is isolated.")
 	}
 
 	_ = config.ModifyConfig(func(c *config.ClusterConfig) {
@@ -125,7 +126,7 @@ func (m *Manager) TriggerPanic(out io.Writer, cfg config.ClusterConfig) error {
 func (m *Manager) RestorePanic(out io.Writer, cfg config.ClusterConfig) error {
 	policy := cfg.Network.PanicPolicy
 
-	fmt.Fprintln(out, "🔓 RESTORING HOMELAB FROM PANIC MODE...")
+	_, _ = fmt.Fprintln(out, "🔓 RESTORING HOMELAB FROM PANIC MODE...")
 
 	// 1. Restore Switch Port State / VLAN
 	if policy.NetworkIsolation == "shutdown" || policy.NetworkIsolation == "vlan" {
@@ -133,36 +134,37 @@ func (m *Manager) RestorePanic(out io.Writer, cfg config.ClusterConfig) error {
 			return fmt.Errorf("network isolation is configured but uplink_port is not set in config")
 		}
 
-		fmt.Fprintln(out, "📡 Connecting to smart switch...")
+		_, _ = fmt.Fprintln(out, "📡 Connecting to smart switch...")
 		if err := m.driver.Connect(); err != nil {
 			return fmt.Errorf("failed to connect to switch: %w", err)
 		}
-		defer m.driver.Close()
+		defer func() { _ = m.driver.Close() }()
 
-		if policy.NetworkIsolation == "shutdown" {
-			fmt.Fprintf(out, "   🔓 Enabling Uplink port (%s)...\n", cfg.Network.UplinkPort)
+		switch policy.NetworkIsolation {
+		case "shutdown":
+			_, _ = fmt.Fprintf(out, "   🔓 Enabling Uplink port (%s)...\n", cfg.Network.UplinkPort)
 			if err := m.driver.SetPortState(cfg.Network.UplinkPort, true); err != nil {
 				return fmt.Errorf("failed to restore uplink port state: %w", err)
 			}
-			fmt.Fprintln(out, "   ✅ Uplink port is UP.")
-		} else if policy.NetworkIsolation == "vlan" {
-			fmt.Fprintf(out, "   🔓 Restoring Uplink port (%s) to default VLAN 1...\n", cfg.Network.UplinkPort)
+			_, _ = fmt.Fprintln(out, "   ✅ Uplink port is UP.")
+		case "vlan":
+			_, _ = fmt.Fprintf(out, "   🔓 Restoring Uplink port (%s) to default VLAN 1...\n", cfg.Network.UplinkPort)
 			if err := m.driver.SetPortVLAN(cfg.Network.UplinkPort, 1); err != nil {
 				return fmt.Errorf("failed to restore uplink port VLAN: %w", err)
 			}
-			fmt.Fprintln(out, "   ✅ Uplink port restored to VLAN 1.")
+			_, _ = fmt.Fprintln(out, "   ✅ Uplink port restored to VLAN 1.")
 		}
 	}
 
 	kubeconfig, err := resolveKubeconfigPath(cfg)
 	if err != nil {
-		fmt.Fprintf(out, "⚠️  Could not resolve kubeconfig path: %v\n", err)
+		_, _ = fmt.Fprintf(out, "⚠️  Could not resolve kubeconfig path: %v\n", err)
 	}
 
 	reachable := false
 	if err == nil {
-		fmt.Fprintln(out, "📡 Checking Kubernetes cluster reachability (waiting up to 10s for uplink)...")
-		for i := 0; i < 5; i++ {
+		_, _ = fmt.Fprintln(out, "📡 Checking Kubernetes cluster reachability (waiting up to 10s for uplink)...")
+		for range 5 {
 			if isClusterReachable(kubeconfig) {
 				reachable = true
 				break
@@ -172,29 +174,29 @@ func (m *Manager) RestorePanic(out io.Writer, cfg config.ClusterConfig) error {
 	}
 
 	if reachable {
-		fmt.Fprintln(out, "✅ Cluster is reachable. Restoring software configurations...")
+		_, _ = fmt.Fprintln(out, "✅ Cluster is reachable. Restoring software configurations...")
 
 		// 2. Restore Cloudflare Tunnels (scale deployment up to 1 replica)
 		if policy.CloudflareKill {
-			fmt.Fprintln(out, "   🔓 Restoring Cloudflare Tunnels (scaling to 1 replica)...")
+			_, _ = fmt.Fprintln(out, "   🔓 Restoring Cloudflare Tunnels (scaling to 1 replica)...")
 			if err := m.scaleCloudflare(out, kubeconfig, 1); err != nil {
-				fmt.Fprintf(out, "   ❌ Cloudflare Tunnel restore failed: %v\n", err)
+				_, _ = fmt.Fprintf(out, "   ❌ Cloudflare Tunnel restore failed: %v\n", err)
 			} else {
-				fmt.Fprintln(out, "   ✅ Cloudflare Tunnels scaled to 1 replica.")
+				_, _ = fmt.Fprintln(out, "   ✅ Cloudflare Tunnels scaled to 1 replica.")
 			}
 		}
 
 		// 3. Restore Software / GitOps auto-sync
 		if policy.SoftwareIsolation {
-			fmt.Fprintln(out, "   🔓 Restoring ArgoCD auto-sync policies...")
+			_, _ = fmt.Fprintln(out, "   🔓 Restoring ArgoCD auto-sync policies...")
 			if err := m.restoreArgoCD(out, kubeconfig); err != nil {
-				fmt.Fprintf(out, "   ❌ ArgoCD restore failed: %v\n", err)
+				_, _ = fmt.Fprintf(out, "   ❌ ArgoCD restore failed: %v\n", err)
 			} else {
-				fmt.Fprintln(out, "   ✅ ArgoCD sync policies restored successfully.")
+				_, _ = fmt.Fprintln(out, "   ✅ ArgoCD sync policies restored successfully.")
 			}
 		}
 	} else {
-		fmt.Fprintln(out, "⚠️  Cluster is unreachable. Cannot restore software configurations automatically.")
+		_, _ = fmt.Fprintln(out, "⚠️  Cluster is unreachable. Cannot restore software configurations automatically.")
 	}
 
 	_ = config.ModifyConfig(func(c *config.ClusterConfig) {
@@ -223,12 +225,12 @@ func (m *Manager) freezeArgoCD(out io.Writer, kubeconfig string) error {
 	}
 
 	for _, app := range apps.Items {
-		fmt.Fprintf(out, "      → Freezing app %s in namespace %s...\n", app.Metadata.Name, app.Metadata.Namespace)
+		_, _ = fmt.Fprintf(out, "      → Freezing app %s in namespace %s...\n", app.Metadata.Name, app.Metadata.Namespace)
 		patchCmd := exec.CommandContext(ctx, "kubectl", "patch", "application", app.Metadata.Name,
 			"-n", app.Metadata.Namespace, "--type", "merge", "-p", `{"spec":{"syncPolicy":null}}`)
 		patchCmd.Env = kubeconfigEnv(kubeconfig)
 		if err := patchCmd.Run(); err != nil {
-			fmt.Fprintf(out, "      ⚠️  Failed to patch app %s: %v\n", app.Metadata.Name, err)
+			_, _ = fmt.Fprintf(out, "      ⚠️  Failed to patch app %s: %v\n", app.Metadata.Name, err)
 		}
 	}
 
@@ -253,12 +255,12 @@ func (m *Manager) restoreArgoCD(out io.Writer, kubeconfig string) error {
 	}
 
 	for _, app := range apps.Items {
-		fmt.Fprintf(out, "      → Restoring auto-sync for app %s in namespace %s...\n", app.Metadata.Name, app.Metadata.Namespace)
+		_, _ = fmt.Fprintf(out, "      → Restoring auto-sync for app %s in namespace %s...\n", app.Metadata.Name, app.Metadata.Namespace)
 		patchCmd := exec.CommandContext(ctx, "kubectl", "patch", "application", app.Metadata.Name,
 			"-n", app.Metadata.Namespace, "--type", "merge", "-p", `{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}`)
 		patchCmd.Env = kubeconfigEnv(kubeconfig)
 		if err := patchCmd.Run(); err != nil {
-			fmt.Fprintf(out, "      ⚠️  Failed to restore app %s: %v\n", app.Metadata.Name, err)
+			_, _ = fmt.Fprintf(out, "      ⚠️  Failed to restore app %s: %v\n", app.Metadata.Name, err)
 		}
 	}
 
@@ -287,18 +289,18 @@ func (m *Manager) scaleCloudflare(out io.Writer, kubeconfig string, replicas int
 		name := strings.ToLower(res.Metadata.Name)
 		if strings.Contains(name, "cloudflare-tunnel") || strings.Contains(name, "cloudflared") {
 			found = true
-			fmt.Fprintf(out, "      → Scaling deployment %s in namespace %s to %d replicas...\n", res.Metadata.Name, res.Metadata.Namespace, replicas)
+			_, _ = fmt.Fprintf(out, "      → Scaling deployment %s in namespace %s to %d replicas...\n", res.Metadata.Name, res.Metadata.Namespace, replicas)
 			scaleCmd := exec.CommandContext(ctx, "kubectl", "scale", "deployment", res.Metadata.Name,
 				"-n", res.Metadata.Namespace, fmt.Sprintf("--replicas=%d", replicas))
 			scaleCmd.Env = kubeconfigEnv(kubeconfig)
 			if err := scaleCmd.Run(); err != nil {
-				fmt.Fprintf(out, "      ⚠️  Failed to scale deployment %s: %v\n", res.Metadata.Name, err)
+				_, _ = fmt.Fprintf(out, "      ⚠️  Failed to scale deployment %s: %v\n", res.Metadata.Name, err)
 			}
 		}
 	}
 
 	if !found {
-		fmt.Fprintln(out, "      ℹ️  No Cloudflare Tunnel deployments found in cluster.")
+		_, _ = fmt.Fprintln(out, "      ℹ️  No Cloudflare Tunnel deployments found in cluster.")
 	}
 
 	return nil

@@ -174,7 +174,7 @@ var networkPanicCmd = &cobra.Command{
 		if !panicConfirm {
 			fmt.Print("🚨 WARNING: You are about to isolate your homelab network and cluster. Confirm? (y/N): ")
 			var response string
-			fmt.Scanln(&response)
+			_, _ = fmt.Scanln(&response)
 			response = strings.TrimSpace(strings.ToLower(response))
 			if response != "y" && response != "yes" {
 				fmt.Println("Panic cancelled.")

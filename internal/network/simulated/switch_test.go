@@ -13,7 +13,7 @@ func TestSimulatedSwitchState(t *testing.T) {
 	if err := sw.Connect(); err != nil {
 		t.Fatalf("failed to connect: %v", err)
 	}
-	defer sw.Close()
+	defer func() { _ = sw.Close() }()
 
 	// Initial check
 	status, err := sw.GetStatus()

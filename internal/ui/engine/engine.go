@@ -394,12 +394,12 @@ func (e Engine) renderBreadcrumbs() string {
 				ctxLine,
 				lipgloss.PlaceHorizontal(paddingWidth, lipgloss.Right, syncSyncLabel(e.theme)+syncStatusValue(e, syncStatus)),
 			)
-			header = combined + "\n\n"
+			header += combined + "\n\n"
 		} else {
-			header = ctxLine + "\n\n"
+			header += ctxLine + "\n\n"
 		}
 	} else {
-		header = ctxLine + "\n\n"
+		header += ctxLine + "\n\n"
 	}
 
 	// Show banner only if we are at the root (Main Menu) and have enough vertical space

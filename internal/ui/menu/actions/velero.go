@@ -70,22 +70,22 @@ func OpsStartVeleroRestore(backupName string, namespaces []string) tea.Cmd {
 
 			keyPath, err := cfg.SSH.ExpandedKeyPath()
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error: %v\n", err)
 				return
 			}
 
 			mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, config.IsDryRun())
 			mgr.Output = writer
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("🚀 Starting restore from backup %q...\n", backupName)))
+			_, _ = fmt.Fprintf(writer, "🚀 Starting restore from backup %q...\n", backupName)
 
 			restoreName, err := mgr.StartVeleroRestore(master.IP, backupName, namespaces)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error starting restore: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error starting restore: %v\n", err)
 				return
 			}
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("✅ Restore resource created: %s\n", restoreName)))
+			_, _ = fmt.Fprintf(writer, "✅ Restore resource created: %s\n", restoreName)
 			_, _ = writer.Write([]byte("⏳ Monitoring restoration progress...\n"))
 
 			for {
@@ -96,15 +96,15 @@ func OpsStartVeleroRestore(backupName string, namespaces []string) tea.Cmd {
 
 				status, err := mgr.GetVeleroRestoreStatus(master.IP, restoreName)
 				if err != nil {
-					_, _ = writer.Write([]byte(fmt.Sprintf("⚠️  Warning checking status: %v\n", err)))
+					_, _ = fmt.Fprintf(writer, "⚠️  Warning checking status: %v\n", err)
 				} else {
-					_, _ = writer.Write([]byte(fmt.Sprintf("Status: %s\n", status)))
+					_, _ = fmt.Fprintf(writer, "Status: %s\n", status)
 					if status == "Completed" {
 						_, _ = writer.Write([]byte("\n✅ Restore finished successfully!\n"))
 						break
 					}
 					if status == "Failed" || status == "PartiallyFailed" {
-						_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Restore completed with state: %s\n", status)))
+						_, _ = fmt.Fprintf(writer, "\n❌ Restore completed with state: %s\n", status)
 						break
 					}
 				}
@@ -141,22 +141,22 @@ func OpsCreateVeleroBackup(backupName string, namespaces []string, ttlStr string
 
 			keyPath, err := cfg.SSH.ExpandedKeyPath()
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error: %v\n", err)
 				return
 			}
 
 			mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, config.IsDryRun())
 			mgr.Output = writer
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("🚀 Starting manual backup %q...\n", backupName)))
+			_, _ = fmt.Fprintf(writer, "🚀 Starting manual backup %q...\n", backupName)
 
 			actualName, err := mgr.CreateVeleroBackup(master.IP, backupName, namespaces, ttlStr)
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("❌ Error starting backup: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "❌ Error starting backup: %v\n", err)
 				return
 			}
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("✅ Backup resource created: %s\n", actualName)))
+			_, _ = fmt.Fprintf(writer, "✅ Backup resource created: %s\n", actualName)
 			_, _ = writer.Write([]byte("⏳ Monitoring backup progress...\n"))
 
 			for {
@@ -167,15 +167,15 @@ func OpsCreateVeleroBackup(backupName string, namespaces []string, ttlStr string
 
 				status, err := mgr.GetVeleroBackupStatus(master.IP, actualName)
 				if err != nil {
-					_, _ = writer.Write([]byte(fmt.Sprintf("⚠️  Warning checking status: %v\n", err)))
+					_, _ = fmt.Fprintf(writer, "⚠️  Warning checking status: %v\n", err)
 				} else {
-					_, _ = writer.Write([]byte(fmt.Sprintf("Status: %s\n", status)))
+					_, _ = fmt.Fprintf(writer, "Status: %s\n", status)
 					if status == "Completed" {
 						_, _ = writer.Write([]byte("\n✅ Backup finished successfully!\n"))
 						break
 					}
 					if status == "Failed" || status == "PartiallyFailed" || status == "FailedValidation" {
-						_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Backup completed with state: %s\n", status)))
+						_, _ = fmt.Fprintf(writer, "\n❌ Backup completed with state: %s\n", status)
 						break
 					}
 				}

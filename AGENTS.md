@@ -147,14 +147,22 @@ return fmt.Errorf("context: %w", err)
 
 ## ✅ Pre-Commit
 
+Before marking any task as complete, you MUST run verification via the [Makefile](file:///e:/Development/kuargogo/Makefile):
+1. Run `make lint` to ensure there are no linter errors.
+2. Run `make test` to ensure all tests pass.
+3. Run `make build` to verify it compiles successfully.
+Alternatively, you can run `make audit` for a combined check of linter, tests, and security scans.
+
+Checklist:
 - No `fmt.Println()` in `internal/`
 - No `os.Exit()` in `internal/`
 - Uses `io.Writer`
 - TUI captures ALL output
 - CLI uses `os.Stdout`
 - Errors wrapped
-- Lint clean
-- Build OK
+- Lint clean (`make lint`)
+- Build OK (`make build`)
+- Tests passing (`make test`)
 
 ---
 

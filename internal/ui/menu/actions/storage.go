@@ -23,17 +23,17 @@ func MountStorage(n config.Node, disk, mountPoint string, tags []string) tea.Cmd
 			defer close(ch)
 			writer := NewProgressWriter(ch)
 
-			_, _ = writer.Write([]byte(fmt.Sprintf("🔧 Mounting %s to %s on %s (%s) via Ansible...\n", disk, mountPoint, n.Name, n.IP)))
+			_, _ = fmt.Fprintf(writer, "🔧 Mounting %s to %s on %s (%s) via Ansible...\n", disk, mountPoint, n.Name, n.IP)
 			_, _ = writer.Write([]byte("⚠️  Warning: This will partition and format the disk (ext4) if not already done.\n\n"))
 
 			result, err := ansible.RunMountStorage(n.Name, disk, mountPoint, config.IsDryRun(), tags, writer)
 
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Error: %v\n", err)
 			} else if !result.Success {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Mount failed (exit code: %d)\n", result.ExitCode)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Mount failed (exit code: %d)\n", result.ExitCode)
 			} else {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n✅ Storage mounted successfully on %s!\n", n.Name)))
+				_, _ = fmt.Fprintf(writer, "\n✅ Storage mounted successfully on %s!\n", n.Name)
 				_, _ = writer.Write([]byte("⚠️  Warning: Added to /etc/fstab for persistence.\n"))
 			}
 		}()
@@ -55,9 +55,9 @@ func LonghornInit() tea.Cmd {
 			result, err := ansible.RunLonghornInit(config.IsDryRun(), nil, writer)
 
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Fatal Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Fatal Error: %v\n", err)
 			} else if !result.Success {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Playbook failed (exit code: %d)\n", result.ExitCode)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Playbook failed (exit code: %d)\n", result.ExitCode)
 			} else {
 				_, _ = writer.Write([]byte("\n✅ Longhorn deployed successfully!\n(It may take a few minutes for pods to be fully ready.)\n"))
 			}
@@ -80,9 +80,9 @@ func LonghornStatus() tea.Cmd {
 			result, err := ansible.RunLonghornStatus("", config.IsDryRun(), writer)
 
 			if err != nil {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Fatal Error: %v\n", err)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Fatal Error: %v\n", err)
 			} else if !result.Success {
-				_, _ = writer.Write([]byte(fmt.Sprintf("\n❌ Check failed (exit code: %d)\n", result.ExitCode)))
+				_, _ = fmt.Fprintf(writer, "\n❌ Check failed (exit code: %d)\n", result.ExitCode)
 			}
 		}()
 
