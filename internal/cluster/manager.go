@@ -41,8 +41,6 @@ func (m *Manager) getExecutor() (*provision.Executor, error) {
 	if err != nil {
 		return nil, err
 	}
-	exec.Stdout = m.Output
-	exec.Stderr = m.Output
 	m.executor = exec
 	return exec, nil
 }

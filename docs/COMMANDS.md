@@ -80,6 +80,22 @@ Control bare-metal hardware power states and RPi infrastructure services.
 
 ---
 
+## 🔌 Switch & Network Management
+
+Manage physical switch configuration, connection policies, rebooting, maps, and panic isolation.
+
+| Command | Description | Example Syntax |
+| :--- | :--- | :--- |
+| `kgg network status` | Queries the physical switch to show status and ports state. | `kgg network status` |
+| `kgg network map` | Displays a physical map of which node is connected to which port on the switch. | `kgg network map` |
+| `kgg network validate` | Validates that physical connections match configuration/inventory policies. | `kgg network validate` |
+| `kgg network apply` | Enforces the `kuargogo.yaml` network layout configuration to the switch hardware. | `kgg network apply` |
+| `kgg network reboot` | Safely reboots the switch hardware. | `kgg network reboot` |
+| `kgg network panic` | Triggers the homelab network and cluster panic isolation sequence. | `kgg network panic --confirm` |
+| `kgg network panic restore` | Restores normal cluster operations from panic isolation. | `kgg network panic restore` |
+
+---
+
 ## 🔐 Multi-Cluster & Security Vault
 
 Manage multiple cluster profiles and encrypt sensitive fields at rest.
@@ -91,6 +107,10 @@ Manage multiple cluster profiles and encrypt sensitive fields at rest.
 | `kgg config use-context` | Switches your active terminal context to another configured environment. | `kgg config use-context production-rack` |
 | `kgg config set-context` | Creates or duplicates a context profile. | `kgg config set-context staging-rack` |
 | `kgg config delete-context` | Safely removes a context profile completely from your local configuration. | `kgg config delete-context staging-rack` |
+| `kgg config set-backup` | Configures S3 Backup (Velero) settings for the current context (including `--readonly` mode). | `kgg config set-backup --url http://... --bucket my-bucket --readonly=true` |
+| `kgg config set-cloudflare` | Configures Cloudflare Zero Trust credentials (email, APIs, tunnel tokens). | `kgg config set-cloudflare --email user@example.com --api-token xxx` |
+| `kgg config set-ansible` | Configures Ansible context settings (WSL distribution name, vault file path). | `kgg config set-ansible --distro Debian --vault-file ~/.ssh/vault` |
+| `kgg config restore` | Restores a configuration backup from the history directory. | `kgg config restore backup-20260617` |
 | `kgg config lint` | Validates your active `kuargogo.yaml` schema for potential syntax anomalies or missing properties. | `kgg config lint` |
 
 ### 🔒 Configuration Encryption (AES-256-GCM)
@@ -115,7 +135,20 @@ Manage local LLM models and core infrastructure services.
 | `kgg ai generate-skill` | Exports a structured `skill.md` playbook summarizing your cluster configurations for external AI agents. | `kgg ai generate-skill` |
 | `kgg app deploy` | `[ANSIBLE]` Provisions predefined application charts and services (e.g. Immich, Home Assistant). | `kgg app deploy homeassistant` |
 | `kgg app backup` | `[ANSIBLE]` Manually triggers an instant S3 cluster backup with status reports. | `kgg app backup` |
-| `kgg storage` | `[ANSIBLE]` Checks dynamic volume status and manages Longhorn components. | `kgg storage status` |
+| `kgg storage init` | `[ANSIBLE]` Provisions and deploys Longhorn distributed block storage on the cluster. | `kgg storage init` |
+| `kgg storage status` | `[ANSIBLE]` Queries and displays the live status of the Longhorn storage engine. | `kgg storage status` |
+
+---
+
+## 💾 Database Disaster Recovery (CNPG)
+
+Manage CloudNativePG (CNPG) backups and perform Point-in-Time Recovery (PITR).
+
+| Command | Description | Example Syntax |
+| :--- | :--- | :--- |
+| `kgg db backup create` | Triggers a manual hot-backup for a CNPG cluster in the cluster namespace. | `kgg db backup create clandestino-db` |
+| `kgg db backup list` | Lists all completed/failed CNPG backups for a given cluster. | `kgg db backup list clandestino-db` |
+| `kgg db restore` | Performs Point-in-Time Recovery (PITR) to a specific target timestamp. Use `--force` for in-place destructive restores. | `kgg db restore clandestino-db --target-name clandestino-db-pitr-2 -t "2026-06-16T18:05:23Z"` |
 
 ---
 
@@ -136,6 +169,9 @@ Declaratively manage GitOps repositories, application definitions, and multi-sta
 | `kgg gitops kargo status` | Displays active pipeline metrics, deployed Freight IDs, and individual Stage readiness. | `kgg gitops kargo status --pipeline app-pipeline` |
 | `kgg gitops kargo freight` | Queries the cluster to list all available, verified Freight packets for a pipeline. | `kgg gitops kargo freight --pipeline app-pipeline` |
 | `kgg gitops kargo promote` | Triggers a manual stage promotion of a specific Freight ID to a target environment stage (e.g., test -> prod). | `kgg gitops kargo promote production auth-freight-1 --pipeline app-pipeline` |
+| `kgg gitops kargo set` / `kgg kargo set` | Sets Kargo configuration values (warehouse repo, image limits, path, stages). | `kgg kargo set --repo https://git.local/apps.git --stages dev,test,prod` |
+| `kgg gitops kargo pipelines` / `kgg kargo pipelines` | Lists all configured Kargo pipeline names. | `kgg kargo pipelines` |
+| `kgg gitops kargo stages` / `kgg kargo stages` | Lists all stages for a Kargo pipeline. | `kgg kargo stages --pipeline app-pipeline` |
 
 ---
 
@@ -176,10 +212,18 @@ General maintenance commands, package managers, and binary updaters.
 | Command | Description | Example Syntax |
 | :--- | :--- | :--- |
 | `kgg setup` | Inspects system packagers and automatically provisions workstation dependencies (Ansible, K9s, Helm). | `kgg setup` |
+| `kgg doctor` | Runs system health diagnostics (CPU temperature, disk, memory, load average, uptime) on all nodes. | `kgg doctor` |
+| `kgg doctor config` | Validates active configuration fields and runs target node SSH reachability tests. | `kgg doctor config` |
 | `kgg ops update` | `[ANSIBLE]` Performs standard rolling updates (`apt update && apt upgrade`) across all compute nodes. | `kgg ops update` |
 | `kgg ops nfs` | `[ANSIBLE]` Re-mounts and configures NFS shares from your NAS device. | `kgg ops nfs` |
+| `kgg ops argocd` | `[ANSIBLE]` Installs the ArgoCD GitOps orchestrator engine onto the cluster. | `kgg ops argocd` |
+| `kgg ops kargo` | `[ANSIBLE]` Installs the Kargo promotion engine onto the cluster. | `kgg ops kargo` |
+| `kgg ops migrate-user` | `[ANSIBLE]` Transitions nodes from the legacy rk-admin SSH user to kgg-admin. | `kgg ops migrate-user` |
 | `kgg playbooks export` | Extracts all embedded Ansible playbooks/roles directly to `~/.kuargogo/playbooks/` for manual edits. | `kgg playbooks export --all` |
 | `kgg ops backup-system` | `[ANSIBLE]` Installs and deploys Velero Disaster Recovery utilizing your S3 bucket configurations. | `kgg ops backup-system` |
+| `kgg ops backup-create` | Triggers a manual cluster backup to S3/R2 via Velero. | `kgg ops backup-create my-backup --ns default` |
+| `kgg ops restore-list` | Queries Velero backup storage to list all available backups stored in the S3 bucket. | `kgg ops restore-list` |
+| `kgg ops restore-trigger` | Restores cluster resources or namespace states from a specific Velero backup. | `kgg ops restore-trigger my-backup --ns clandestino-dev` |
 | `kgg env` | Displays active binary metadata, resolved file paths, context caches, and OS diagnostics. | `kgg env` |
 | `kgg update` | Queries the upstream repository and executes automated in-place upgrades of the `kgg` binary. | `kgg update` |
 

@@ -1,11 +1,11 @@
 ---
 
-- name: Create credentials file from template
-  template:
-    src: credentials-velero.j2
-    dest: "/tmp/credentials-velero"
-    mode: '0600'
-  when: velero_s3_access_key != ""
+- name: Ensure Velero namespace exists
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ velero_namespace }}"
+    state: present
 
 - name: Create Velero credentials secret
   kubernetes.core.k8s:
@@ -18,7 +18,10 @@
         namespace: "{{ velero_namespace }}"
       type: Opaque
       stringData:
-        cloud: "{{ lookup('file', '/tmp/credentials-velero') }}"
+        cloud: |
+          [default]
+          aws_access_key_id={{ velero_s3_access_key }}
+          aws_secret_access_key={{ velero_s3_secret_key }}
   when: velero_s3_access_key != ""
 
 - name: Add VMware Tanzu Helm repository
@@ -33,31 +36,30 @@
     release_namespace: "{{ velero_namespace }}"
     chart_version: "{{ velero_chart_version }}"
     create_namespace: true
+    update_repo_cache: true
     values:
+      snapshotsEnabled: false
       configuration:
-        provider: "{{ velero_provider }}"
         backupStorageLocation:
           - name: default
             provider: "{{ velero_provider }}"
             bucket: "{{ velero_s3_bucket }}"
+            prefix: "{{ velero_s3_prefix }}"
+            accessMode: "{{ 'ReadOnly' if velero_s3_readonly | default(false) else 'ReadWrite' }}"
             config:
               region: "{{ velero_s3_region }}"
               s3Url: "{{ velero_s3_url }}"
-              s3ForcePathStyle: true
+              s3ForcePathStyle: "true"
+        volumeSnapshotLocation: []
       initContainers:
         - name: velero-plugin-for-aws
-          image: velero/velero-plugin-for-aws:v1.10.0
+          image: "velero/velero-plugin-for-aws:{{ velero_aws_plugin_version }}"
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /target
               name: plugins
       credentials:
-        useSecret: true
-        existingSecret: cloud-credentials
+        useSecret: "{{ velero_s3_access_key != '' }}"
+        existingSecret: "{{ 'cloud-credentials' if velero_s3_access_key != '' else '' }}"
       deployNodeAgent: true
 
-- name: Clean up temporary credentials file
-  file:
-    path: "/tmp/credentials-velero"
-    state: absent
-  when: velero_s3_access_key != ""

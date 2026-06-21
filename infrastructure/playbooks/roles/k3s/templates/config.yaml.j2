@@ -41,8 +41,6 @@ kubelet-arg:
 
 # Extra Arguments from kuargogo.yaml
 {% set extra_args = k3s_server_extra_args if (k3s_type == 'server') else k3s_agent_extra_args %}
-{% if extra_args is defined and extra_args != '' %}
-{% for arg in extra_args.split(',') %}
-{{ arg }}
-{% endfor %}
+{% if extra_args is defined and extra_args != '' and extra_args != '{}' %}
+{{ extra_args | from_json | to_nice_yaml(indent=2) }}
 {% endif %}

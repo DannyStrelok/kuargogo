@@ -155,3 +155,89 @@ contexts:
 		t.Errorf("Expected 1 node, got %d", len(cfg.Nodes))
 	}
 }
+
+func TestLoadConfig_K3sArgs_LegacyAndModern(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Legacy slice format
+	legacyConfigPath := filepath.Join(tmpDir, "legacy_args.yaml")
+	legacyContent := []byte(`
+current_context: test-legacy
+contexts:
+  test-legacy:
+    nodes:
+      - name: node1
+        ip: 10.0.0.1
+        role: master
+    ssh:
+      private_key_path: ~/.ssh/id_rsa
+    k3s:
+      server_args:
+        - "--disable=servicelb"
+        - "--disable=traefik"
+        - "--write-kubeconfig-mode=644"
+`)
+	if err := os.WriteFile(legacyConfigPath, legacyContent, 0644); err != nil {
+		t.Fatalf("failed to write legacy args config: %v", err)
+	}
+
+	if err := LoadConfig(legacyConfigPath); err != nil {
+		t.Fatalf("LoadConfig failed for legacy format: %v", err)
+	}
+
+	cfg := GetConfig().K3s
+	if cfg.ServerArgs["write-kubeconfig-mode"] != "644" {
+		t.Errorf("expected write-kubeconfig-mode to be '644', got %v", cfg.ServerArgs["write-kubeconfig-mode"])
+	}
+
+	disablesRaw := cfg.ServerArgs["disable"]
+	var disables []string
+	if slice, ok := disablesRaw.([]interface{}); ok {
+		for _, v := range slice {
+			if s, ok := v.(string); ok {
+				disables = append(disables, s)
+			}
+		}
+	} else if slice, ok := disablesRaw.([]string); ok {
+		disables = slice
+	} else {
+		t.Errorf("expected disable to be a slice, got %T: %v", disablesRaw, disablesRaw)
+	}
+
+	if len(disables) != 2 || disables[0] != "servicelb" || disables[1] != "traefik" {
+		t.Errorf("expected disables to be [servicelb, traefik], got %v", disables)
+	}
+
+	// 2. Modern map format
+	modernConfigPath := filepath.Join(tmpDir, "modern_args.yaml")
+	modernContent := []byte(`
+current_context: test-modern
+contexts:
+  test-modern:
+    nodes:
+      - name: node1
+        ip: 10.0.0.1
+        role: master
+    ssh:
+      private_key_path: ~/.ssh/id_rsa
+    k3s:
+      server_args:
+        disable:
+          - servicelb
+          - traefik
+        write-kubeconfig-mode: "644"
+`)
+	if err := os.WriteFile(modernConfigPath, modernContent, 0644); err != nil {
+		t.Fatalf("failed to write modern args config: %v", err)
+	}
+
+	if err := LoadConfig(modernConfigPath); err != nil {
+		t.Fatalf("LoadConfig failed for modern format: %v", err)
+	}
+
+	cfgModern := GetConfig().K3s
+	if cfgModern.ServerArgs["write-kubeconfig-mode"] != "644" {
+		t.Errorf("expected write-kubeconfig-mode to be '644', got %v", cfgModern.ServerArgs["write-kubeconfig-mode"])
+	}
+}
+

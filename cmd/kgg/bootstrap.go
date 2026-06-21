@@ -23,7 +23,7 @@ var bootstrapCmd = &cobra.Command{
 
 This is a unified command that ensures nodes are correctly integrated into the cluster.`,
 	Example: `  kgg bootstrap --node 192.168.1.100 --dhcp 192.168.1.45 --user debian
-  kgg bootstrap --node raspberry-pi-3 --user debian --create-user`,
+  kgg bootstrap --node raspberry-pi-3 --user debian`,
 	Run: func(cmd *cobra.Command, args []string) {
 		nodeRef, _ := cmd.Flags().GetString("node")
 		dhcpIP, _ := cmd.Flags().GetString("dhcp")
@@ -31,7 +31,6 @@ This is a unified command that ensures nodes are correctly integrated into the c
 		pass, _ := cmd.Flags().GetString("password")
 		keyPath, _ := cmd.Flags().GetString("key")
 		skipProvision, _ := cmd.Flags().GetBool("skip-provision")
-		createUser, _ := cmd.Flags().GetBool("create-user")
 		tagsFlag, _ := cmd.Flags().GetString("tags")
 
 		if nodeRef == "" {
@@ -106,7 +105,7 @@ This is a unified command that ensures nodes are correctly integrated into the c
 			Password:      pass,
 			KeyPath:       keyPath,
 			SSHPort:       port,
-			CreateUser:    createUser,
+			CreateUser:    true,
 			SkipProvision: skipProvision,
 			Tags:          tags,
 			Role:          nodeRole,
@@ -128,7 +127,6 @@ func init() {
 	bootstrapCmd.Flags().String("password", "", "SSH password (will prompt if omitted)")
 	bootstrapCmd.Flags().String("key", "", "SSH private key path (default: from config)")
 	bootstrapCmd.Flags().Bool("skip-provision", false, "Skip Ansible provisioning after key setup")
-	bootstrapCmd.Flags().Bool("create-user", false, "Create 'kgg-admin' user during provisioning")
 	bootstrapCmd.Flags().String("tags", "", "Comma-separated Ansible tags for provisioning")
 	rootCmd.AddCommand(bootstrapCmd)
 }

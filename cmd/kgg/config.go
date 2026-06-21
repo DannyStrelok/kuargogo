@@ -19,6 +19,7 @@ func init() {
 	configCmd.AddCommand(currentContextCmd)
 	configCmd.AddCommand(setCloudflareCmd)
 	configCmd.AddCommand(setAnsibleCmd)
+	configCmd.AddCommand(setBackupCmd)
 	configCmd.AddCommand(restoreCmd)
 }
 
@@ -263,6 +264,79 @@ Examples:
 	},
 }
 
+var setBackupCmd = &cobra.Command{
+	Use:   "set-backup",
+	Short: "Configure S3 Backup (Velero) settings for the current context",
+	Long: `Set S3 backup configurations used by Velero.
+	
+Examples:
+  kgg config set-backup --url https://endpoint.com --bucket my-bucket --access-key xxx --secret-key yyy
+  kgg config set-backup --readonly=true`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		url, _ := cmd.Flags().GetString("url")
+		bucket, _ := cmd.Flags().GetString("bucket")
+		prefix, _ := cmd.Flags().GetString("prefix")
+		region, _ := cmd.Flags().GetString("region")
+		accessKey, _ := cmd.Flags().GetString("access-key")
+		secretKey, _ := cmd.Flags().GetString("secret-key")
+
+		var hasReadOnly bool
+		var readonly bool
+		if cmd.Flags().Changed("readonly") {
+			hasReadOnly = true
+			readonly, _ = cmd.Flags().GetBool("readonly")
+		}
+
+		if url == "" && bucket == "" && prefix == "" && region == "" && accessKey == "" && secretKey == "" && !hasReadOnly {
+			return fmt.Errorf("at least one flag is required")
+		}
+
+		err := config.ModifyConfig(func(c *config.ClusterConfig) {
+			if url != "" {
+				c.Backup.S3Url = url
+			}
+			if bucket != "" {
+				c.Backup.S3Bucket = bucket
+			}
+			if prefix != "" {
+				c.Backup.S3Prefix = prefix
+			}
+			if region != "" {
+				c.Backup.S3Region = region
+			}
+			if accessKey != "" {
+				c.Backup.S3AccessKey = config.Secret(accessKey)
+			}
+			if secretKey != "" {
+				c.Backup.S3SecretKey = config.Secret(secretKey)
+			}
+			if hasReadOnly {
+				c.Backup.ReadOnly = readonly
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update config: %w", err)
+		}
+
+		if err := config.SaveConfig(); err != nil {
+			return fmt.Errorf("failed to save config: %w", err)
+		}
+
+		fmt.Println("✅ Backup configuration updated.")
+
+		cfg := config.GetConfig()
+		fmt.Printf("  S3 URL:      %s\n", maskEmpty(cfg.Backup.S3Url))
+		fmt.Printf("  Bucket Name: %s\n", maskEmpty(cfg.Backup.S3Bucket))
+		fmt.Printf("  Prefix:      %s\n", maskEmpty(cfg.Backup.S3Prefix))
+		fmt.Printf("  Region:      %s\n", maskEmpty(cfg.Backup.S3Region))
+		fmt.Printf("  Access Key:  %s\n", maskSecret(string(cfg.Backup.S3AccessKey)))
+		fmt.Printf("  Secret Key:  %s\n", maskSecret(string(cfg.Backup.S3SecretKey)))
+		fmt.Printf("  Read Only:   %t\n", cfg.Backup.ReadOnly)
+
+		return nil
+	},
+}
+
 func init() {
 	setCloudflareCmd.Flags().String("email", "", "Cloudflare account email")
 	setCloudflareCmd.Flags().String("api-token", "", "Cloudflare API Token (Tunnel + DNS + Access permissions)")
@@ -272,6 +346,14 @@ func init() {
 
 	setAnsibleCmd.Flags().String("distro", "", "WSL Distribution (e.g. Ubuntu, Debian)")
 	setAnsibleCmd.Flags().String("vault-file", "", "Ansible Vault password file path")
+
+	setBackupCmd.Flags().String("url", "", "S3 endpoint URL")
+	setBackupCmd.Flags().String("bucket", "", "S3 bucket name")
+	setBackupCmd.Flags().String("prefix", "", "S3 folder prefix")
+	setBackupCmd.Flags().String("region", "", "S3 region")
+	setBackupCmd.Flags().String("access-key", "", "S3 Access Key ID")
+	setBackupCmd.Flags().String("secret-key", "", "S3 Secret Access Key")
+	setBackupCmd.Flags().Bool("readonly", false, "Enable read-only mode for backups")
 }
 
 func maskSecret(s string) string {

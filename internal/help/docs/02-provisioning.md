@@ -165,7 +165,6 @@ El comando `bootstrap` combina keygen + ssh-copy + provisioning en un solo paso:
 
 Flags útiles:
 - `--skip-provision` — Solo configura SSH, sin provisionar
-- `--create-user` — Crea el usuario `kgg-admin` con sudo
 - `--tags firewall,kernel` — Ejecuta solo tags específicos de Ansible
 - `--password <pass>` — Proporciona la contraseña directamente (si no, te la pedirá)
 
@@ -192,7 +191,6 @@ Flags útiles:
 | Flag | Descripción |
 |:---|:---|
 | `--node <IP>` | IP del nodo a provisionar (obligatorio) |
-| `--create-user` | Crea usuario `kgg-admin` con privilegios sudo |
 | `--tags <tags>` | Tags Ansible separados por comas (ej: `firewall,kernel`) |
 
 > [!NOTE]

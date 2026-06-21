@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/DannyStrelok/kuargogo/internal/config"
 	"github.com/DannyStrelok/kuargogo/internal/network"
@@ -164,6 +165,55 @@ var networkMapCmd = &cobra.Command{
 	},
 }
 
+var panicConfirm bool
+
+var networkPanicCmd = &cobra.Command{
+	Use:   "panic",
+	Short: "Activate homelab network and cluster panic isolation",
+	Run: func(cmd *cobra.Command, args []string) {
+		if !panicConfirm {
+			fmt.Print("🚨 WARNING: You are about to isolate your homelab network and cluster. Confirm? (y/N): ")
+			var response string
+			_, _ = fmt.Scanln(&response)
+			response = strings.TrimSpace(strings.ToLower(response))
+			if response != "y" && response != "yes" {
+				fmt.Println("Panic cancelled.")
+				return
+			}
+		}
+
+		mgr, err := getNetworkManager()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := mgr.TriggerPanic(os.Stdout, config.GetConfig()); err != nil {
+			fmt.Printf("Failed to isolate: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("🚨 Panic isolation sequence completed.")
+	},
+}
+
+var networkPanicRestoreCmd = &cobra.Command{
+	Use:   "restore",
+	Short: "Restore homelab network and cluster from panic isolation",
+	Run: func(cmd *cobra.Command, args []string) {
+		mgr, err := getNetworkManager()
+		if err != nil {
+			fmt.Printf("Error: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := mgr.RestorePanic(os.Stdout, config.GetConfig()); err != nil {
+			fmt.Printf("Failed to restore: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("🔓 Normal operations restored successfully.")
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(networkCmd)
 	networkCmd.AddCommand(networkApplyCmd)
@@ -171,6 +221,10 @@ func init() {
 	networkCmd.AddCommand(networkStatusCmd)
 	networkCmd.AddCommand(networkRebootCmd)
 	networkCmd.AddCommand(networkMapCmd)
+
+	networkPanicCmd.Flags().BoolVar(&panicConfirm, "confirm", false, "Skip interactive confirmation prompt")
+	networkCmd.AddCommand(networkPanicCmd)
+	networkPanicCmd.AddCommand(networkPanicRestoreCmd)
 }
 
 func getNetworkManager() (*network.Manager, error) {

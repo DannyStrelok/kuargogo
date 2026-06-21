@@ -1,13 +1,16 @@
 ---
 velero_namespace: "velero"
-velero_chart_version: "8.2.1" # Tested stable version for Velero 1.15
+velero_chart_version: "12.0.2" # Installs Velero v1.18.1
+velero_aws_plugin_version: "v1.8.2" # AWS plugin version (v1 SDK) compatible with Cloudflare R2
 
 # S3 Credentials and config
 velero_s3_url: ""
 velero_s3_bucket: ""
+velero_s3_prefix: ""
 velero_s3_region: "minio" # Fallback region for MinIO/S3 compatible
 velero_s3_access_key: ""
 velero_s3_secret_key: ""
+velero_s3_readonly: false
 
 # Provider can be aws (used for s3 compliant like minio, cloudflare r2, wasabi)
 velero_provider: "aws"

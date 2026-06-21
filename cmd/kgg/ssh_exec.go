@@ -36,6 +36,8 @@ var sshExecCmd = &cobra.Command{
 			fmt.Printf("Error initializing SSH executor: %v\n", err)
 			os.Exit(1)
 		}
+		executor.Stdout = os.Stdout
+		executor.Stderr = os.Stderr
 
 		out, err := executor.ExecuteCommand(node.IP, config.GetConfig().SSH.Port, remoteCmd)
 		if err != nil {

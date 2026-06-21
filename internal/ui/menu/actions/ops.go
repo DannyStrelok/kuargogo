@@ -28,109 +28,157 @@ import (
 )
 
 // OpsUpdate runs the maintenance playbook on all nodes.
-// It captures output for TUI display.
+// It captures and streams output for TUI display.
 func OpsUpdate() tea.Cmd {
 	return func() tea.Msg {
-		// Check dependencies
 		if err := deps.CheckAll("ansible", "ansible-playbook"); err != nil {
 			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v\n\nPlease install Ansible first.", err)}
 		}
 
-		playbookDir, err := ansible.FindPlaybookDir()
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v", err)}
-		}
-		runner := ansible.NewRunner(playbookDir)
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
 
-		// Capture output to buffer
-		var buf bytes.Buffer
-		runner.Output = &buf
+			msg := "🚀 Starting System Package Update on all nodes...\n"
+			if config.IsDryRun() {
+				msg = "🧪 [DRY RUN] Starting System Package Update simulation...\n"
+			}
+			_, _ = writer.Write([]byte(msg))
 
-		result, err := runner.Run("update.yml", "", nil)
+			playbookDir, err := ansible.FindPlaybookDir()
+			if err != nil {
+				ch <- fmt.Sprintf("❌ Error: %v", err)
+				return
+			}
+			runner := ansible.NewRunner(playbookDir)
+			runner.Output = writer
 
-		output := buf.String()
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Error: %v", output, err)}
-		}
+			result, err := runner.Run("update.yml", "", nil)
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ Update failed: %v", err)
+				return
+			}
 
-		if result.Success {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n✅ Update completed successfully in %s", output, result.Duration.Round(1))}
-		}
-		return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Update failed (exit code: %d)", output, result.ExitCode)}
+			if result.Success {
+				ch <- fmt.Sprintf("\n✅ Update completed successfully in %s", result.Duration.Round(1))
+			} else {
+				ch <- fmt.Sprintf("\n❌ Update failed (exit code: %d)", result.ExitCode)
+			}
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
 
 // OpsNfs runs the NFS setup playbook on all nodes.
-// It captures output for TUI display.
+// It captures and streams output for TUI display.
 func OpsNfs() tea.Cmd {
 	return func() tea.Msg {
-		// Check dependencies
 		if err := deps.CheckAll("ansible", "ansible-playbook"); err != nil {
 			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v\n\nPlease install Ansible first.", err)}
 		}
 
-		playbookDir, err := ansible.FindPlaybookDir()
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v", err)}
-		}
-		runner := ansible.NewRunner(playbookDir)
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
 
-		var buf bytes.Buffer
-		runner.Output = &buf
+			msg := "🚀 Starting NFS Setup on all nodes...\n"
+			if config.IsDryRun() {
+				msg = "🧪 [DRY RUN] Starting NFS Setup simulation...\n"
+			}
+			_, _ = writer.Write([]byte(msg))
 
-		result, err := runner.Run("setup-nfs.yml", "", nil)
+			playbookDir, err := ansible.FindPlaybookDir()
+			if err != nil {
+				ch <- fmt.Sprintf("❌ Error: %v", err)
+				return
+			}
+			runner := ansible.NewRunner(playbookDir)
+			runner.Output = writer
 
-		output := buf.String()
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Error: %v", output, err)}
-		}
+			result, err := runner.Run("setup-nfs.yml", "", nil)
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ NFS setup failed: %v", err)
+				return
+			}
 
-		if result.Success {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n✅ NFS setup completed successfully in %s", output, result.Duration.Round(1))}
-		}
-		return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ NFS setup failed (exit code: %d)", output, result.ExitCode)}
+			if result.Success {
+				ch <- fmt.Sprintf("\n✅ NFS setup completed successfully in %s", result.Duration.Round(1))
+			} else {
+				ch <- fmt.Sprintf("\n❌ NFS setup failed (exit code: %d)", result.ExitCode)
+			}
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
 
 // OpsUpdateWithNotify runs update and sends Telegram notification.
 func OpsUpdateWithNotify() tea.Cmd {
 	return func() tea.Msg {
-		// Check dependencies
 		if err := deps.CheckAll("ansible", "ansible-playbook"); err != nil {
 			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v", err)}
 		}
 
-		playbookDir, err := ansible.FindPlaybookDir()
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v", err)}
-		}
-		runner := ansible.NewRunner(playbookDir)
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
 
-		var buf bytes.Buffer
-		runner.Output = &buf
+			msg := "🚀 Starting System Package Update with Telegram alerts...\n"
+			if config.IsDryRun() {
+				msg = "🧪 [DRY RUN] Starting System Package Update (Notify) simulation...\n"
+			}
+			_, _ = writer.Write([]byte(msg))
 
-		result, err := runner.Run("update.yml", "", nil)
+			playbookDir, err := ansible.FindPlaybookDir()
+			if err != nil {
+				ch <- fmt.Sprintf("❌ Error: %v", err)
+				return
+			}
+			runner := ansible.NewRunner(playbookDir)
 
-		// Send notification
-		notifier := notify.NewTelegramNotifier()
-		if notifier.IsConfigured() && result != nil {
-			_ = notifier.NotifyAnsibleResult(result)
-		}
+			// Capture output for both writer and notifier
+			var buf bytes.Buffer
+			runner.Output = io.MultiWriter(writer, &buf)
 
-		output := buf.String()
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Error: %v", output, err)}
-		}
+			result, err := runner.Run("update.yml", "", nil)
 
-		notifyStatus := ""
-		if notifier.IsConfigured() {
-			notifyStatus = "\n📱 Telegram notification sent"
-		}
+			// Patch result stdout/stderr with collected buffer
+			if result != nil {
+				result.Stdout = buf.String()
+			}
 
-		if result != nil && result.Success {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n✅ Update completed successfully%s", output, notifyStatus)}
-		}
-		return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Update failed%s", output, notifyStatus)}
+			// Send notification
+			notifier := notify.NewTelegramNotifier()
+			if notifier.IsConfigured() && result != nil {
+				_ = notifier.NotifyAnsibleResult(result)
+			}
+
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ Update failed: %v", err)
+				return
+			}
+
+			notifyStatus := ""
+			if notifier.IsConfigured() {
+				notifyStatus = "\n📱 Telegram notification sent"
+			}
+
+			if result != nil && result.Success {
+				ch <- fmt.Sprintf("\n✅ Update completed successfully%s", notifyStatus)
+			} else {
+				exitCode := -1
+				if result != nil {
+					exitCode = result.ExitCode
+				}
+				ch <- fmt.Sprintf("\n❌ Update failed (exit code: %d)%s", exitCode, notifyStatus)
+			}
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
 
@@ -141,18 +189,31 @@ func OpsBackupSystem() tea.Cmd {
 			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v\n\nPlease install Ansible first.", err)}
 		}
 
-		var buf bytes.Buffer
-		result, err := ansible.RunOpsBackup(false, nil, nil, &buf)
-		output := buf.String()
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
 
-		if err != nil {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Error: %v", output, err)}
-		}
+			msg := "🚀 Starting Velero Disaster Recovery deployment...\n"
+			if config.IsDryRun() {
+				msg = "🧪 [DRY RUN] Starting Velero Disaster Recovery simulation...\n"
+			}
+			_, _ = writer.Write([]byte(msg))
 
-		if result.Success {
-			return ResultMsg{Output: fmt.Sprintf("%s\n\n✅ Velero Master Backup Deployed", output)}
-		}
-		return ResultMsg{Output: fmt.Sprintf("%s\n\n❌ Velero deployment failed", output)}
+			result, err := ansible.RunOpsBackup(config.IsDryRun(), nil, nil, writer)
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ Deployment failed: %v", err)
+				return
+			}
+
+			if result.Success {
+				ch <- "\n✅ Velero Master Backup Deployed successfully."
+			} else {
+				ch <- fmt.Sprintf("\n❌ Velero deployment failed (exit code: %d)", result.ExitCode)
+			}
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
 

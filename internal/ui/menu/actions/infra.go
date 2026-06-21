@@ -48,6 +48,8 @@ func InfraInit() tea.Cmd {
 			defer close(ch)
 			writer := NewProgressWriter(ch)
 
+			_, _ = writer.Write([]byte("🚀 Starting Infrastructure Manager provisioning...\n"))
+
 			// Proactively clear existing host keys to prevent verification failures
 			// during initial provisioning of the infrastructure manager.
 			_ = provision.RemoveSystemHostKey(infraNode.IP)
@@ -100,6 +102,8 @@ func InfraBotUpdate() tea.Cmd {
 		go func() {
 			defer close(ch)
 			writer := NewProgressWriter(ch)
+
+			_, _ = writer.Write([]byte("🚀 Starting Quick Update: Bot & KGGCLI...\n"))
 
 			result, err := ansible.RunInfraBotUpdate(config.IsDryRun(), extraVars, writer)
 

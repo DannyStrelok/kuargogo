@@ -117,7 +117,7 @@ func (e *Executor) RunHealthCheck(ip string, port int) ([]HealthCheckResult, err
 		},
 		{
 			Name: "CPU Temperature",
-			Cmd:  "cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | head -1 || echo 'N/A'",
+			Cmd:  "for z in /sys/class/thermal/thermal_zone*; do t=$(cat $z/type 2>/dev/null); if [ \"$t\" = \"x86_pkg_temp\" ] || [ \"$t\" = \"cpu-thermal\" ] || [ \"$t\" = \"soc-thermal\" ]; then cat $z/temp; exit; fi; done; cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 'N/A'",
 			Icon: "🌡️",
 			Parser: func(out string) string {
 				val := strings.TrimSpace(out)

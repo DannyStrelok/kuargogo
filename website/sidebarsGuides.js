@@ -28,6 +28,7 @@ module.exports = {
       collapsed: false,
       items: [
         { type: 'doc', id: 'cluster-and-services', label: '☸️ Cluster & Storage' },
+        { type: 'doc', id: 'k9s-cluster-management', label: '☸️ K9s Management Guide' },
       ],
     },
     {

@@ -94,3 +94,62 @@ func TestWriteInventory_Labels(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteInventory_K3sArgs(t *testing.T) {
+	nodes := []config.Node{
+		{
+			Name: "master1",
+			IP:   "10.0.0.10",
+			User: "pi",
+			Role: "master",
+		},
+	}
+
+	tmpKey, err := os.CreateTemp("", "kgg-test-key")
+	if err != nil {
+		t.Fatalf("failed to create temp key: %v", err)
+	}
+	tmpKeyPath := tmpKey.Name()
+	_ = tmpKey.Close()
+	defer func() {
+		_ = os.Remove(tmpKeyPath)
+	}()
+
+	origCfg := config.GetConfig()
+	mockCfg := origCfg.DeepCopy()
+	mockCfg.SSH.PrivateKeyPath = tmpKeyPath
+	mockCfg.K3s.ServerArgs = config.ExtraArgs{
+		"disable":               []any{"servicelb", "traefik"},
+		"write-kubeconfig-mode": "644",
+	}
+	mockCfg.K3s.AgentArgs = config.ExtraArgs{
+		"node-ip": "10.0.0.10",
+	}
+	config.SetConfig(mockCfg)
+	defer config.SetConfig(origCfg)
+
+	var buf bytes.Buffer
+	_, err = WriteInventory(&buf, nodes)
+	if err != nil {
+		t.Fatalf("WriteInventory failed: %v", err)
+	}
+
+	out := buf.String()
+
+	// Check if the JSON strings are written inside single quotes correctly
+	if !strings.Contains(out, "k3s_server_extra_args='") {
+		t.Errorf("Missing single quoted k3s_server_extra_args in inventory: %s", out)
+	}
+	if !strings.Contains(out, "k3s_agent_extra_args='") {
+		t.Errorf("Missing single quoted k3s_agent_extra_args in inventory: %s", out)
+	}
+
+	// Verify specific JSON values
+	if !strings.Contains(out, `"write-kubeconfig-mode":"644"`) {
+		t.Errorf("Missing write-kubeconfig-mode JSON in inventory: %s", out)
+	}
+	if !strings.Contains(out, `"node-ip":"10.0.0.10"`) {
+		t.Errorf("Missing node-ip JSON in inventory: %s", out)
+	}
+}
+

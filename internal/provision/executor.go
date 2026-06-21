@@ -140,7 +140,7 @@ type Executor struct {
 // NewExecutor creates a new SSH executor with Private Key Auth
 func NewExecutor(user, keyPath string, dryRun bool) (*Executor, error) {
 	if dryRun {
-		return &Executor{DryRun: true, Stdout: os.Stdout, Stderr: os.Stderr}, nil
+		return &Executor{DryRun: true}, nil
 	}
 
 	key, err := os.ReadFile(keyPath)
@@ -173,8 +173,6 @@ func NewExecutor(user, keyPath string, dryRun bool) (*Executor, error) {
 
 	return &Executor{
 		Config: config,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
 	}, nil
 }
 
@@ -198,8 +196,6 @@ func NewPasswordExecutor(user, password string) (*Executor, error) {
 
 	return &Executor{
 		Config: config,
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
 	}, nil
 }
 
@@ -358,19 +354,18 @@ func (e *Executor) ExecuteCommand(host string, port int, command string) (string
 
 	var stdoutBuf bytes.Buffer
 	var stderrBuf bytes.Buffer
-	// Default to os.Stdout/Stderr if not set, though NewExecutor sets them.
-	// We want to capture output AND stream it if configured.
-	stdoutW := e.Stdout
-	if stdoutW == nil {
-		stdoutW = os.Stdout
-	}
-	stderrW := e.Stderr
-	if stderrW == nil {
-		stderrW = os.Stderr
+
+	if e.Stdout != nil {
+		session.Stdout = io.MultiWriter(e.Stdout, &stdoutBuf)
+	} else {
+		session.Stdout = &stdoutBuf
 	}
 
-	session.Stdout = io.MultiWriter(stdoutW, &stdoutBuf)
-	session.Stderr = io.MultiWriter(stderrW, &stderrBuf)
+	if e.Stderr != nil {
+		session.Stderr = io.MultiWriter(e.Stderr, &stderrBuf)
+	} else {
+		session.Stderr = &stderrBuf
+	}
 
 	if err := session.Run(command); err != nil {
 		stderrStr := strings.TrimSpace(stderrBuf.String())

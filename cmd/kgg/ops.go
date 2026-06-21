@@ -12,6 +12,7 @@ import (
 
 	"github.com/DannyStrelok/kuargogo/internal/ansible"
 	"github.com/DannyStrelok/kuargogo/internal/cloudflare"
+	"github.com/DannyStrelok/kuargogo/internal/cluster"
 	"github.com/DannyStrelok/kuargogo/internal/config"
 	"github.com/DannyStrelok/kuargogo/internal/deps"
 	"github.com/DannyStrelok/kuargogo/internal/notify"
@@ -116,6 +117,34 @@ Example:
 	RunE: runOpsBackup,
 }
 
+var opsRestoreListCmd = &cobra.Command{
+	Use:   "restore-list",
+	Short: "List available Velero backups in S3",
+	Long:  `Queries the cluster master node to list all available backups stored in the S3/R2 bucket.`,
+	RunE:  runOpsRestoreList,
+}
+
+var opsRestoreTriggerCmd = &cobra.Command{
+	Use:   "restore-trigger <backup-name>",
+	Short: "Trigger a Velero restore operation from a specific backup",
+	Long:  `Creates a Velero Restore resource on the cluster to recover state from the specified backup.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runOpsRestoreTrigger,
+}
+
+var restoreNamespaces []string
+
+var opsBackupCreateCmd = &cobra.Command{
+	Use:   "backup-create <backup-name>",
+	Short: "Trigger a manual Velero backup",
+	Long:  `Creates a Velero Backup resource on the cluster to back up state to S3/R2 on-demand.`,
+	Args:  cobra.ExactArgs(1),
+	RunE:  runOpsBackupCreate,
+}
+
+var backupNamespaces []string
+var backupTTL string
+
 var opsMigrateUserCmd = &cobra.Command{
 	Use:   "migrate-user",
 	Short: "Migrate homelab nodes from rk-admin to kgg-admin",
@@ -142,6 +171,13 @@ func init() {
 	opsCmd.AddCommand(opsArgoCDCmd)
 	opsCmd.AddCommand(opsKargoCmd)
 	opsCmd.AddCommand(opsBackupCmd)
+	opsCmd.AddCommand(opsRestoreListCmd)
+	opsRestoreTriggerCmd.Flags().StringSliceVar(&restoreNamespaces, "ns", nil, "Limit restoration to specific namespaces (comma-separated)")
+	opsCmd.AddCommand(opsRestoreTriggerCmd)
+
+	opsBackupCreateCmd.Flags().StringSliceVar(&backupNamespaces, "ns", nil, "Limit backup to specific namespaces (comma-separated)")
+	opsBackupCreateCmd.Flags().StringVar(&backupTTL, "ttl", "240h0m0s", "TTL (Time To Live) for this backup")
+	opsCmd.AddCommand(opsBackupCreateCmd)
 
 	opsMigrateUserCmd.Flags().String("node", "", "Limit migration to a specific node name or IP")
 	opsMigrateUserCmd.Flags().String("old-user", "rk-admin", "Current SSH user on target nodes")
@@ -524,5 +560,158 @@ func runOpsKargo(cmd *cobra.Command, args []string) error {
 	}
 
 	sendNotification(result)
+	return nil
+}
+
+func runOpsRestoreList(cmd *cobra.Command, args []string) error {
+	cfg := config.GetConfig()
+	var master *config.Node
+	for _, n := range cfg.Nodes {
+		if n.Role == "master" || n.Role == "control-plane" {
+			master = &n
+			break
+		}
+	}
+	if master == nil {
+		return fmt.Errorf("no master node found in configuration")
+	}
+
+	kp, err := cfg.SSH.ExpandedKeyPath()
+	if err != nil {
+		return err
+	}
+
+	mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, DryRun)
+	backups, err := mgr.ListVeleroBackups(master.IP)
+	if err != nil {
+		return fmt.Errorf("failed to list Velero backups: %w", err)
+	}
+
+	if len(backups) == 0 {
+		fmt.Println("No backups found in S3 bucket.")
+		return nil
+	}
+
+	fmt.Println("\n💾 AVAILABLE VELERO BACKUPS (S3):")
+	fmt.Println("--------------------------------------------------------------------------------")
+	fmt.Printf("%-40s %-15s %-25s\n", "BACKUP NAME", "STATUS", "CREATED AT")
+	fmt.Println("--------------------------------------------------------------------------------")
+	for _, b := range backups {
+		fmt.Printf("%-40s %-15s %-25s\n", b.Name, b.Phase, b.StartTimestamp)
+	}
+	fmt.Println("--------------------------------------------------------------------------------")
+
+	return nil
+}
+
+func runOpsRestoreTrigger(cmd *cobra.Command, args []string) error {
+	backupName := args[0]
+	cfg := config.GetConfig()
+	var master *config.Node
+	for _, n := range cfg.Nodes {
+		if n.Role == "master" || n.Role == "control-plane" {
+			master = &n
+			break
+		}
+	}
+	if master == nil {
+		return fmt.Errorf("no master node found in configuration")
+	}
+
+	kp, err := cfg.SSH.ExpandedKeyPath()
+	if err != nil {
+		return err
+	}
+
+	mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, DryRun)
+	
+	fmt.Printf("🚀 Requesting restore from backup %q...\n", backupName)
+	restoreName, err := mgr.StartVeleroRestore(master.IP, backupName, restoreNamespaces)
+	if err != nil {
+		return fmt.Errorf("failed to trigger restore: %w", err)
+	}
+
+	fmt.Printf("✅ Restore resource %q successfully created in namespace 'velero'.\n", restoreName)
+	fmt.Println("⏳ Monitoring progress...")
+
+	for {
+		if DryRun {
+			fmt.Println("✨ [DRY RUN] Restore completed successfully.")
+			break
+		}
+
+		status, err := mgr.GetVeleroRestoreStatus(master.IP, restoreName)
+		if err != nil {
+			fmt.Printf("⚠️  Warning checking status: %v\n", err)
+		} else {
+			fmt.Printf("Status: %s\n", status)
+			if status == "Completed" {
+				fmt.Println("\n✅ Restore finished successfully!")
+				break
+			}
+			if status == "Failed" || status == "PartiallyFailed" {
+				return fmt.Errorf("restore completed with failure state: %s", status)
+			}
+		}
+
+		time.Sleep(3 * time.Second)
+	}
+
+	return nil
+}
+
+func runOpsBackupCreate(cmd *cobra.Command, args []string) error {
+	backupName := args[0]
+	cfg := config.GetConfig()
+	var master *config.Node
+	for _, n := range cfg.Nodes {
+		if n.Role == "master" || n.Role == "control-plane" {
+			master = &n
+			break
+		}
+	}
+	if master == nil {
+		return fmt.Errorf("no master node found in configuration")
+	}
+
+	kp, err := cfg.SSH.ExpandedKeyPath()
+	if err != nil {
+		return err
+	}
+
+	mgr := cluster.NewManager(master.User, kp, cfg.SSH.Port, DryRun)
+
+	fmt.Printf("🚀 Requesting manual backup %q...\n", backupName)
+	actualName, err := mgr.CreateVeleroBackup(master.IP, backupName, backupNamespaces, backupTTL)
+	if err != nil {
+		return fmt.Errorf("failed to trigger backup: %w", err)
+	}
+
+	fmt.Printf("✅ Backup resource %q successfully created in namespace 'velero'.\n", actualName)
+	fmt.Println("⏳ Monitoring progress...")
+
+	for {
+		if DryRun {
+			fmt.Println("✨ [DRY RUN] Backup completed successfully.")
+			break
+		}
+
+		status, err := mgr.GetVeleroBackupStatus(master.IP, actualName)
+		if err != nil {
+			fmt.Printf("⚠️  Warning checking status: %v\n", err)
+		} else {
+			fmt.Printf("Status: %s\n", status)
+			if status == "Completed" {
+				fmt.Println("\n✅ Backup finished successfully!")
+				break
+			}
+			if status == "Failed" || status == "PartiallyFailed" || status == "FailedValidation" {
+				return fmt.Errorf("backup completed with failure state: %s", status)
+			}
+		}
+
+		time.Sleep(3 * time.Second)
+	}
+
 	return nil
 }

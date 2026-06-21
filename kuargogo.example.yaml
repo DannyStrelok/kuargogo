@@ -57,6 +57,14 @@ contexts:
       pass: "admin"               # Plain-text or !vaultENC:...
       api_port: 80
       driver: "tplink"            # Supported drivers: "tplink", "mikrotik", "simulated"
+      # --- Killswitch Configuration ---
+      uplink_port: "port_8"       # Port connected to the main home router/gateway
+      quarantine_vlan: 666        # Isolated VLAN with no gateway/forwarding rules
+      panic_policy:
+        software_isolation: true  # Pause ArgoCD & suspend Kargo promotions
+        cloudflare_kill: true     # Instantly disable Cloudflare Tunnels by scaling to 0
+        network_isolation: "vlan" # Options: "shutdown" (turn port off) | "vlan" (move to quarantine) | "none"
+        notify_admin: true        # Send alert verification after isolation
 
     # -----------------------------------------------------------------
     # 🌐 Declared VLAN Layout
@@ -94,10 +102,11 @@ contexts:
       vip_interface: "eth0"
       ha: true
       version: "v1.29.2+k3s1"     # Target K3s version to install
-      server_args:                # Custom CLI flags passed to k3s server
-        - "--disable=servicelb"
-        - "--disable=traefik"
-      agent_args: []              # Custom CLI flags passed to k3s agent
+      server_args:                # Custom configuration parameters passed to K3s server config.yaml
+        disable:
+          - "servicelb"
+          - "traefik"
+      agent_args: {}              # Custom configuration parameters passed to K3s agent config.yaml
 
     # -----------------------------------------------------------------
     # 🤖 "The Voice" Telegram Daemon
@@ -141,6 +150,17 @@ contexts:
         - src: "/volume1/data"
           dest: "/mnt/data"
           opts: "rw,sync,no_subtree_check"
+
+    # -----------------------------------------------------------------
+    # 🛡️ Disaster Recovery Backup Settings (Velero)
+    # -----------------------------------------------------------------
+    backup:
+      s3_url: "https://your-s3-endpoint.com"
+      s3_bucket: "velero-backups"
+      s3_prefix: "cluster-homelab"
+      s3_region: "us-east-1"
+      s3_access_key: "your-access-key" # Plain-text or !vaultENC:...
+      s3_secret_key: "your-secret-key" # Plain-text or !vaultENC:...
 
     # -----------------------------------------------------------------
     # ☁️ Cloudflare Zero Trust Tunnels

@@ -83,9 +83,8 @@ func (m *OutputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "esc", "q":
-			if !m.running {
-				return m, engine.Pop()
-			}
+			actions.StopActiveTunnel()
+			return m, engine.Pop()
 		}
 
 	case tea.MouseClickMsg:

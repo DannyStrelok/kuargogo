@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 // Secret is a string type that automatically encrypts/decrypts when marshaled to/from YAML.
@@ -282,15 +283,27 @@ type Backup struct {
 	S3Region    string `mapstructure:"s3_region" yaml:"s3_region"`
 	S3AccessKey Secret `mapstructure:"s3_access_key" yaml:"s3_access_key"`
 	S3SecretKey Secret `mapstructure:"s3_secret_key" yaml:"s3_secret_key"`
+	ReadOnly    bool   `mapstructure:"readonly" yaml:"readonly,omitempty"`
 }
 
 // Network holds switch credentials and connection details
 type Network struct {
-	SwitchIP string `mapstructure:"switch_ip" yaml:"switch_ip"`
-	User     string `mapstructure:"user" yaml:"user"`
-	Password Secret `mapstructure:"pass" yaml:"pass"`
-	APIPort  int    `mapstructure:"api_port" yaml:"api_port"` // For RouterOS or future API usage
-	Driver   string `mapstructure:"driver" yaml:"driver"`     // tplink, mikrotik, simulated
+	SwitchIP       string      `mapstructure:"switch_ip" yaml:"switch_ip"`
+	User           string      `mapstructure:"user" yaml:"user"`
+	Password       Secret      `mapstructure:"pass" yaml:"pass"`
+	APIPort        int         `mapstructure:"api_port" yaml:"api_port"` // For RouterOS or future API usage
+	Driver         string      `mapstructure:"driver" yaml:"driver"`     // tplink, mikrotik, simulated
+	UplinkPort     string      `mapstructure:"uplink_port" yaml:"uplink_port,omitempty"`
+	QuarantineVLAN int         `mapstructure:"quarantine_vlan" yaml:"quarantine_vlan,omitempty"`
+	PanicPolicy    PanicPolicy `mapstructure:"panic_policy" yaml:"panic_policy,omitempty"`
+	PanicActive    bool        `mapstructure:"panic_active" yaml:"panic_active,omitempty"`
+}
+
+type PanicPolicy struct {
+	SoftwareIsolation bool   `mapstructure:"software_isolation" yaml:"software_isolation"`
+	CloudflareKill    bool   `mapstructure:"cloudflare_kill" yaml:"cloudflare_kill"`
+	NetworkIsolation  string `mapstructure:"network_isolation" yaml:"network_isolation"` // "shutdown", "vlan", or "none"
+	NotifyAdmin       bool   `mapstructure:"notify_admin" yaml:"notify_admin"`
 }
 
 // NetworkLayout defines the desired state of the switch (Declared Infrastructure)
@@ -358,16 +371,62 @@ type MQTT struct {
 	TopicPrefix string `mapstructure:"topic_prefix" yaml:"topic_prefix"`
 }
 
+// ExtraArgs represents custom CLI flags/arguments passed to K3s.
+// It supports both legacy string slice format and modern dictionary format.
+type ExtraArgs map[string]any
+
+// UnmarshalYAML implements custom unmarshaling to support both formats.
+func (ea *ExtraArgs) UnmarshalYAML(value *yaml.Node) error {
+	// Try to decode as map
+	var m map[string]any
+	if err := value.Decode(&m); err == nil {
+		*ea = ExtraArgs(m)
+		return nil
+	}
+
+	// Try to decode as slice
+	var slice []string
+	if err := value.Decode(&slice); err != nil {
+		return err
+	}
+
+	res := make(map[string]any)
+	for _, arg := range slice {
+		cleanArg := strings.TrimPrefix(arg, "--")
+		cleanArg = strings.TrimPrefix(cleanArg, "-")
+
+		parts := strings.SplitN(cleanArg, "=", 2)
+		key := strings.TrimSpace(parts[0])
+		var val any = true
+		if len(parts) > 1 {
+			val = strings.TrimSpace(parts[1])
+		}
+
+		if existing, ok := res[key]; ok {
+			if existSlice, ok := existing.([]any); ok {
+				res[key] = append(existSlice, val)
+			} else {
+				res[key] = []any{existing, val}
+			}
+		} else {
+			res[key] = val
+		}
+	}
+
+	*ea = ExtraArgs(res)
+	return nil
+}
+
 // K3s holds cluster configuration
 type K3s struct {
-	Token          Secret   `mapstructure:"token" yaml:"token"`
-	KubeconfigPath string   `mapstructure:"kubeconfig_path" yaml:"kubeconfig_path"`
-	VIP            string   `mapstructure:"vip" yaml:"vip"`
-	VIPInterface   string   `mapstructure:"vip_interface" yaml:"vip_interface"`
-	HA             bool     `mapstructure:"ha" yaml:"ha"`
-	Version        string   `mapstructure:"version" yaml:"version"`
-	ServerArgs     []string `mapstructure:"server_args" yaml:"server_args,omitempty"`
-	AgentArgs      []string `mapstructure:"agent_args" yaml:"agent_args,omitempty"`
+	Token          Secret    `mapstructure:"token" yaml:"token"`
+	KubeconfigPath string    `mapstructure:"kubeconfig_path" yaml:"kubeconfig_path"`
+	VIP            string    `mapstructure:"vip" yaml:"vip"`
+	VIPInterface   string    `mapstructure:"vip_interface" yaml:"vip_interface"`
+	HA             bool      `mapstructure:"ha" yaml:"ha"`
+	Version        string    `mapstructure:"version" yaml:"version"`
+	ServerArgs     ExtraArgs `mapstructure:"server_args" yaml:"server_args,omitempty"`
+	AgentArgs      ExtraArgs `mapstructure:"agent_args" yaml:"agent_args,omitempty"`
 }
 
 // ExpandedKubeconfigPath returns the kubeconfig path with ~ expanded to home directory
