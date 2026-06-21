@@ -145,7 +145,12 @@ func NewWizardModel(theme engine.Theme) *WizardModel {
 				Description("Optional: Encrypts secrets (API tokens/passwords) at rest in kuargogo.yaml").
 				EchoMode(huh.EchoModePassword).
 				Value(&m.masterPass),
-		).Title("5. Security & Vault"),
+		).
+			Title("5. Security & Vault").
+			WithHideFunc(func() bool {
+				pass, err := config.GetMasterKey()
+				return err == nil && pass != ""
+			}),
 
 		// Group 6: Cloud Resilient Sync Option
 		huh.NewGroup(
