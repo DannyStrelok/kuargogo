@@ -36,7 +36,7 @@ endif
 security:
 ifneq ($(LOOKUP_TRIVY),)
 	@echo "🛡️  Running security scan..."
-	trivy fs . --severity CRITICAL,HIGH --ignore-unfixed --pkg-types os,library
+	trivy fs . --severity CRITICAL,HIGH --ignore-unfixed --pkg-types os,library --exit-code 1
 else
 	@echo "⚠️  trivy not found. Skipping."
 endif
