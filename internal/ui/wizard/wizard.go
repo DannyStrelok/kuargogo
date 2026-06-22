@@ -162,7 +162,12 @@ func NewWizardModel(theme engine.Theme) *WizardModel {
 					huh.NewOption("Enabled (S3-Compatible)", "s3"),
 				).
 				Value(&m.syncProvider),
-		).Title("6. Cloud Resilient Backup Option"),
+		).
+			Title("6. Cloud Resilient Backup Option").
+			WithHideFunc(func() bool {
+				syncProv := config.RootConfigGetSync().Provider
+				return syncProv != "" && syncProv != "none"
+			}),
 
 		// Group 6b: Cloud Backup Details (Conditional)
 		huh.NewGroup(
@@ -214,7 +219,13 @@ func NewWizardModel(theme engine.Theme) *WizardModel {
 				Value(&m.syncS3Region),
 		).
 			Title("6.1 S3 Credentials").
-			WithHideFunc(func() bool { return m.syncProvider == "none" }),
+			WithHideFunc(func() bool {
+				syncProv := config.RootConfigGetSync().Provider
+				if syncProv != "" && syncProv != "none" {
+					return true
+				}
+				return m.syncProvider == "none"
+			}),
 	)
 
 	return m

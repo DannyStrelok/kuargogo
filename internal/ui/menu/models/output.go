@@ -152,6 +152,11 @@ func (m *OutputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshViewport()
 		return m, nil
 
+	case actions.ContextSwitchedMsg:
+		m.running = false
+		m.finalDuration = time.Since(m.startTime)
+		return m, engine.PopToRoot()
+
 	case error: // Process finished with error
 		m.running = false
 		m.finalDuration = time.Since(m.startTime)
