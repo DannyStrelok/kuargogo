@@ -45,7 +45,7 @@ jobs:
         run: go test -race -v ./...
       - name: Upload Coverage
         if: matrix.os == 'ubuntu-latest'
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.out
           fail_ci_if_error: false
