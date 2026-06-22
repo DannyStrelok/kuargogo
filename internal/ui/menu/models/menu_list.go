@@ -5,6 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/DannyStrelok/kuargogo/internal/ui/engine"
+	"github.com/DannyStrelok/kuargogo/internal/ui/menu/actions"
 )
 
 // ListModel delegates generic list behavior and styling.
@@ -79,6 +80,10 @@ func (m *MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case engine.ConfigReloadedMsg, engine.ResumeMsg:
 		m.updateListItems()
 		return m, nil
+
+	case actions.ContextSwitchedMsg:
+		m.updateListItems()
+		return m, engine.PopToRoot()
 
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
