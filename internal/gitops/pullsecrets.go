@@ -66,6 +66,11 @@ func (s *PullSecretsService) Sync(cfg config.ClusterConfig) error {
 			secretName, cred.Registry)
 
 		for _, ns := range namespaces {
+			if err := s.ensureNamespace(kubeconfigPath, ns); err != nil {
+				_, _ = fmt.Fprintf(s.Output, "   ❌ [%s] namespace: %v\n", ns, err)
+				continue
+			}
+
 			if err := s.upsertSecret(kubeconfigPath, ns, secretName, cred.Registry,
 				cred.Username, string(cred.Password), email); err != nil {
 				_, _ = fmt.Fprintf(s.Output, "   ❌ [%s] %v\n", ns, err)
@@ -185,4 +190,33 @@ func kubeconfigEnv(kubeconfigPath string) []string {
 		}
 	}
 	return append(env, "KUBECONFIG="+kubeconfigPath)
+}
+
+// ensureNamespace checks if the namespace exists, and creates it if missing.
+func (s *PullSecretsService) ensureNamespace(kubeconfigPath, namespace string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// check if namespace exists
+	checkCmd := exec.CommandContext(ctx, "kubectl", "get", "namespace", namespace)
+	checkCmd.Env = kubeconfigEnv(kubeconfigPath)
+	if err := checkCmd.Run(); err == nil {
+		// Namespace already exists
+		return nil
+	}
+
+	if s.DryRun {
+		_, _ = fmt.Fprintf(s.Output, "   [dry-run] kubectl create namespace %s\n", namespace)
+		return nil
+	}
+
+	// Create it
+	createCmd := exec.CommandContext(ctx, "kubectl", "create", "namespace", namespace)
+	createCmd.Env = kubeconfigEnv(kubeconfigPath)
+	out, err := createCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("creating namespace: %w\n%s", err, string(out))
+	}
+	_, _ = fmt.Fprintf(s.Output, "   ✨ [%s] namespace created\n", namespace)
+	return nil
 }

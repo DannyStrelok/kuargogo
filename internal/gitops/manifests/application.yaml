@@ -42,9 +42,21 @@ spec:
       selfHeal: true
     syncOptions:
     - CreateNamespace=true
+    - ServerSideApply=true
   ignoreDifferences:
   - group: postgresql.cnpg.io
     kind: Cluster
     jsonPointers:
     - /spec/storage/pvcTemplate/metadata
     - /spec/walStorage/pvcTemplate/metadata
+    - /spec/managed/roles
+    - /spec/plugins
+  - group: apps
+    kind: Deployment
+    jsonPointers:
+    - /spec/replicas
+  - group: apps
+    kind: StatefulSet
+    jqPathExpressions:
+    - .spec.volumeClaimTemplates[].apiVersion
+    - .spec.volumeClaimTemplates[].kind

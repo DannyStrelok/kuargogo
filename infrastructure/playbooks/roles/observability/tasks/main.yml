@@ -1,4 +1,10 @@
 ---
+- name: "WARNING: This role is deprecated. Use GitOps (homelab-ops) instead."
+  debug:
+    msg: |
+      OBSERVABILITY ROLE DEPRECATED!
+      The LGTM stack is now managed via GitOps in the homelab-ops repository.
+      This role is kept only as a fallback or reference.
 
 - name: Add Prometheus Community Helm repository
   kubernetes.core.helm_repository:

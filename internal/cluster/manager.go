@@ -155,3 +155,39 @@ func (m *Manager) RemediateNode(masterNode *config.Node, targetNodeName string, 
 
 	return nil
 }
+
+// UninstallObservability uninstalls the Helm observability stacks and deletes the monitoring namespace.
+func (m *Manager) UninstallObservability(masterIP string) error {
+	executor, err := m.getExecutor()
+	if err != nil {
+		return err
+	}
+
+	// 1. Delete namespace (this deletes Loki, Tempo, and Promtail, and Helm metadata secrets)
+	// We run it with a timeout to avoid hanging forever
+	_, _ = fmt.Fprintln(m.Output, "⏳ Deleting 'monitoring' namespace (this may take a few minutes)...")
+	_, err = executor.ExecuteCommand(masterIP, m.Port, "sudo k3s kubectl delete namespace monitoring --timeout=5m")
+	if err != nil {
+		_, _ = fmt.Fprintf(m.Output, "⚠️ Warning during namespace deletion: %v\n", err)
+	} else {
+		_, _ = fmt.Fprintln(m.Output, "✅ Namespace 'monitoring' deleted.")
+	}
+
+	// 2. Clean up cluster-scoped resources left behind by kube-prometheus-stack, loki, tempo
+	_, _ = fmt.Fprintln(m.Output, "🧹 Cleaning up cluster-scoped resources (ClusterRoles, Webhooks)...")
+	
+	// Clean ClusterRoles and ClusterRoleBindings with label
+	cleanupCmds := []string{
+		"sudo k3s kubectl delete clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/instance=kube-prometheus-stack --ignore-not-found",
+		"sudo k3s kubectl delete clusterrole,clusterrolebinding -l app.kubernetes.io/instance=loki --ignore-not-found",
+		"sudo k3s kubectl delete clusterrole,clusterrolebinding -l app.kubernetes.io/instance=tempo --ignore-not-found",
+	}
+
+	for _, cmd := range cleanupCmds {
+		_, _ = executor.ExecuteCommand(masterIP, m.Port, cmd)
+	}
+
+	_, _ = fmt.Fprintln(m.Output, "✅ Cluster-scoped resources cleaned up.")
+	return nil
+}
+

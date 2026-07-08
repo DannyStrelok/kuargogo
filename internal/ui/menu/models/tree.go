@@ -515,6 +515,27 @@ func buildGitOpsAndPlatformServicesNode() MenuNode {
 				},
 			},
 			{
+				Title:       "🗑️  Uninstall Observability Stack (Legacy)",
+				Description: "Remove legacy Helm charts & delete monitoring namespace",
+				Action: func() tea.Cmd {
+					var confirm bool
+					f := huh.NewForm(
+						huh.NewGroup(
+							huh.NewConfirm().
+								Title("Uninstall Observability Stack?").
+								Description("This will remove local Helm configurations and delete the 'monitoring' namespace. Historic data will be lost.").
+								Value(&confirm),
+						),
+					)
+					return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+						if !confirm {
+							return func() tea.Msg { return actions.ResultMsg{Output: "Cancelled."} }
+						}
+						return actions.OpsUninstallObservability()
+					}))
+				},
+			},
+			{
 				Title:       "🔓 Access Grafana (Local Mode)",
 				Description: "Secure tunnel to local dashboard (offline ready)",
 				Action: func() tea.Cmd {

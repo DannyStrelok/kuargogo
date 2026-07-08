@@ -271,6 +271,61 @@ func OpsObservability() tea.Cmd {
 	}
 }
 
+// OpsUninstallObservability uninstalls the LGTM stack and deletes the namespace.
+func OpsUninstallObservability() tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
+
+			cfg := config.GetConfig()
+			var master *config.Node
+			for _, n := range cfg.Nodes {
+				if n.Role == "master" || n.Role == "control-plane" {
+					master = &n
+					break
+				}
+			}
+			if master == nil {
+				_, _ = writer.Write([]byte("❌ Error: no master node found in configuration\n"))
+				return
+			}
+
+			keyPath, err := cfg.SSH.ExpandedKeyPath()
+			if err != nil {
+				_, _ = fmt.Fprintf(writer, "❌ Error: %v\n", err)
+				return
+			}
+
+			mgr := cluster.NewManager(master.User, keyPath, cfg.SSH.Port, config.IsDryRun())
+			mgr.Output = writer
+
+			msg := fmt.Sprintf("🚀 Starting LGTM Stack uninstallation on master node (%s)...\n", master.IP)
+			if config.IsDryRun() {
+				msg = "🧪 [DRY RUN] Simulating LGTM Stack uninstallation...\n"
+			}
+			_, _ = writer.Write([]byte(msg))
+
+			if config.IsDryRun() {
+				_, _ = writer.Write([]byte("✅ [DRY RUN] Namespace 'monitoring' deleted.\n"))
+				_, _ = writer.Write([]byte("✅ [DRY RUN] Cluster-scoped resources cleaned.\n"))
+				return
+			}
+
+			err = mgr.UninstallObservability(master.IP)
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ Uninstallation failed: %v", err)
+				return
+			}
+
+			ch <- "\n✅ LGTM Observability Stack Uninstalled successfully."
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
+	}
+}
+
 // OpsCloudflare deploys Cert-Manager and Cloudflared Zero Trust.
 func OpsCloudflare(provision bool) tea.Cmd {
 	return func() tea.Msg {
