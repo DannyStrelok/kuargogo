@@ -14,6 +14,9 @@
     chart_version: "{{ argocd_chart_version }}"
     update_repo_cache: true
     values:
+      configs:
+        cm:
+          kustomize.buildOptions: "--enable-helm"
       repoServer:
         resources:
           requests:
@@ -43,9 +46,11 @@
       controller:
         resources:
           requests:
-            memory: "256Mi"
-          limits:
             memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "1000m"
       applicationSet:
         resources:
           requests:
@@ -59,7 +64,7 @@
 - name: Add Sealed Secrets Helm repository
   kubernetes.core.helm_repository:
     name: sealed-secrets
-    repo_url: "https://bitnami-labs.github.io/sealed-secrets"
+    repo_url: "https://bitnami.github.io/sealed-secrets"
   tags: [ secrets, argocd ]
 
 - name: Deploy Sealed Secrets Controller via Helm
