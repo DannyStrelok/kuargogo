@@ -109,6 +109,28 @@ var gitopsAppRemoveCmd = &cobra.Command{
 	},
 }
 
+var gitopsAppUnlockCmd = &cobra.Command{
+	Use:   "unlock <name>",
+	Short: "Force unlock deletion of an ArgoCD application (removes finalizers)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		appName := args[0]
+		kubeconfig, err := gitops.ResolveKubeconfigPath()
+		if err != nil {
+			return fmt.Errorf("failed to resolve kubeconfig: %w", err)
+		}
+
+		svc := gitops.NewAppUnlockService()
+		svc.Output = cmd.OutOrStdout()
+		svc.DryRun = config.IsDryRun()
+
+		if err := svc.Unlock(appName, kubeconfig); err != nil {
+			return fmt.Errorf("unlock failed: %w", err)
+		}
+		return nil
+	},
+}
+
 // --- Repo/Credentials Commands ---
 
 var gitopsRepoCmd = &cobra.Command{
@@ -237,6 +259,7 @@ func init() {
 	gitopsAppAddCmd.Flags().StringVar(&appValuesBranch, "values-branch", "main", "Git branch/revision for Helm values repo")
 	gitopsAppCmd.AddCommand(gitopsAppAddCmd)
 	gitopsAppCmd.AddCommand(gitopsAppRemoveCmd)
+	gitopsAppCmd.AddCommand(gitopsAppUnlockCmd)
 
 	// Repo commands
 	gitopsCmd.AddCommand(gitopsRepoCmd)

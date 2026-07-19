@@ -14,13 +14,13 @@ import (
 
 // GenerateInventory creates a temporary inventory file and returns its path and the SSH key path used.
 // It is the caller's responsibility to delete the inventory file.
-func GenerateInventory() (string, string, error) {
+func GenerateInventory(dryRun bool) (string, string, error) {
 	tmpfile, err := os.CreateTemp("", "kgg-inventory-*.ini")
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create temp inventory: %w", err)
 	}
 
-	keyPath, err := WriteInventory(tmpfile, config.GetConfig().Nodes)
+	keyPath, err := WriteInventory(tmpfile, config.GetConfig().Nodes, dryRun)
 	if err != nil {
 		_ = tmpfile.Close()
 		_ = os.Remove(tmpfile.Name())
@@ -38,7 +38,7 @@ func GenerateInventory() (string, string, error) {
 // WriteInventory writes an Ansible-compatible inventory to the given writer.
 // Groups nodes by role: infra, server, agent, and all.
 // Returns the (potentially WSL-native) SSH key path referenced in the inventory.
-func WriteInventory(w io.Writer, nodes []config.Node) (string, error) {
+func WriteInventory(w io.Writer, nodes []config.Node, dryRun bool) (string, error) {
 	groups := map[string][]config.Node{
 		"infra":       {}, // Infrastructure Manager (RPi)
 		"server":      {}, // K3s Servers (k3s-ansible standard)
@@ -76,8 +76,10 @@ func WriteInventory(w io.Writer, nodes []config.Node) (string, error) {
 	}
 
 	// Validate that the key actually exists before doing anything
-	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("SSH key not found at %s.\nPlease run 'Cluster Lifecycle -> Quick Bootstrap' or 'SSH Management -> Generate Cluster Key' first", keyPath)
+	if !dryRun {
+		if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+			return "", fmt.Errorf("SSH key not found at %s.\nPlease run 'Cluster Lifecycle -> Quick Bootstrap' or 'SSH Management -> Generate Cluster Key' first", keyPath)
+		}
 	}
 
 	// On Windows, sync the SSH key into WSL's native filesystem (~/.ssh/) with

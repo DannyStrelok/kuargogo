@@ -2614,6 +2614,7 @@ func buildGitOpsManagementNode() MenuNode {
 						// Iterate over apps
 						for j, a := range currentProject.Apps {
 							appIndex := j
+							targetAppName := a.Name
 							var appDesc string
 							if a.IsHelm() {
 								if a.ValuesFile != "" {
@@ -2704,6 +2705,19 @@ func buildGitOpsManagementNode() MenuNode {
 														return func() tea.Msg { return actions.ResultMsg{Output: "Cancelled"} }
 													}
 													return actions.RemoveGitOpsApp(projectIndex, appIndex)
+												}))
+											},
+										},
+										{
+											Title: "🔓 Unlock Deletion (ArgoCD)",
+											Action: func() tea.Cmd {
+												var confirm bool
+												f := huh.NewForm(huh.NewGroup(huh.NewConfirm().Title("Force unlock deletion of '" + targetAppName + "'?").Value(&confirm)))
+												return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
+													if !confirm {
+														return func() tea.Msg { return actions.ResultMsg{Output: "Cancelled"} }
+													}
+													return actions.UnlockGitOpsApp(targetAppName)
 												}))
 											},
 										},

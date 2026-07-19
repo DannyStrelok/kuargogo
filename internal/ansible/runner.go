@@ -80,7 +80,7 @@ func (r *Runner) Run(playbookName string, limit string, extraVars map[string]str
 	}
 
 	// Generate dynamic inventory from config
-	inventoryPath, keyPath, err := GenerateInventory()
+	inventoryPath, keyPath, err := GenerateInventory(r.DryRun)
 	if err != nil {
 		return nil, err
 	}

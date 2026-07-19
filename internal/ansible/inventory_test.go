@@ -60,7 +60,7 @@ func TestWriteInventory_Labels(t *testing.T) {
 	defer config.SetConfig(origCfg)
 
 	var buf bytes.Buffer
-	_, err = WriteInventory(&buf, nodes)
+	_, err = WriteInventory(&buf, nodes, false)
 	if err != nil {
 		t.Fatalf("WriteInventory failed: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestWriteInventory_K3sArgs(t *testing.T) {
 	defer config.SetConfig(origCfg)
 
 	var buf bytes.Buffer
-	_, err = WriteInventory(&buf, nodes)
+	_, err = WriteInventory(&buf, nodes, false)
 	if err != nil {
 		t.Fatalf("WriteInventory failed: %v", err)
 	}

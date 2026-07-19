@@ -173,3 +173,29 @@ func SyncGitOpsState() tea.Cmd {
 		return ActionStartedMsg{ProgressChan: ch}
 	}
 }
+
+// UnlockGitOpsApp patches an ArgoCD application to remove finalizers and force deletion.
+func UnlockGitOpsApp(appName string) tea.Cmd {
+	return func() tea.Msg {
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
+
+			kubeconfig, err := gitops.ResolveKubeconfigPath()
+			if err != nil {
+				ch <- fmt.Sprintf("❌ Error resolving kubeconfig: %v", err)
+				return
+			}
+
+			svc := gitops.NewAppUnlockService()
+			svc.Output = writer
+			svc.DryRun = config.IsDryRun()
+
+			if err := svc.Unlock(appName, kubeconfig); err != nil {
+				ch <- fmt.Sprintf("\n❌ Unlock failed: %v", err)
+			}
+		}()
+		return ActionStartedMsg{ProgressChan: ch}
+	}
+}
