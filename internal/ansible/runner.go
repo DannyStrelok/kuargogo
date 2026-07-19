@@ -64,16 +64,18 @@ func NewRunner(playbookDir string) *Runner {
 // extraVars are passed as -e key=value arguments.
 func (r *Runner) Run(playbookName string, limit string, extraVars map[string]string) (*Result, error) {
 	// Check ansible-playbook is installed (WSL or Native)
-	if runtime.GOOS == "windows" {
-		if err := deps.CheckWSLUbuntu(); err != nil {
-			return nil, err
-		}
-		if err := deps.CheckWSLCommand("ansible-playbook"); err != nil {
-			return nil, fmt.Errorf("ansible is not installed in WSL. Run 'kgg setup' to install it: %w", err)
-		}
-	} else {
-		if err := deps.CheckDependency("ansible-playbook"); err != nil {
-			return nil, err
+	if !r.DryRun {
+		if runtime.GOOS == "windows" {
+			if err := deps.CheckWSLUbuntu(); err != nil {
+				return nil, err
+			}
+			if err := deps.CheckWSLCommand("ansible-playbook"); err != nil {
+				return nil, fmt.Errorf("ansible is not installed in WSL. Run 'kgg setup' to install it: %w", err)
+			}
+		} else {
+			if err := deps.CheckDependency("ansible-playbook"); err != nil {
+				return nil, err
+			}
 		}
 	}
 
