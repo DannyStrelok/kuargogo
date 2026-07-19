@@ -161,7 +161,7 @@ Declaratively manage GitOps repositories, application definitions, and multi-sta
 | `kgg gitops list` | Renders a tree view representing your declared repositories, projects, and synced GitOps applications. | `kgg gitops list` |
 | `kgg gitops project add` | Adds a new project boundary (logical collection of related applications). | `kgg gitops project add backend --desc "Core services"` |
 | `kgg gitops project remove` | Removes a project boundary and cordons its associated apps from the cluster. | `kgg gitops project remove backend` |
-| `kgg gitops app add` | Declares a new ArgoCD application and appends its sync path/repository to the active context. | `kgg gitops app add backend auth-api https://git.local/apps path/k8s` |
+| `kgg gitops app add` | Declares a new ArgoCD application and appends it to the active context. Supports optional manifests path and Helm parameters (`--chart`, `--chart-version`, `--values-file`, `--values-repo`, `--values-branch`). | `kgg gitops app add backend auth-api https://git.local/apps path/k8s` <br> `kgg gitops app add load-clandestino redis-load https://charts.bitnami.com/bitnami --chart redis --chart-version 25.x --values-file environments/dev/infra/redis-values.yaml --values-repo https://github.com/DannyStrelok/clandestino_ops` |
 | `kgg gitops app remove` | Removes a declared application from the configuration. | `kgg gitops app remove backend auth-api` |
 | `kgg gitops repo add` | Saves private Git repository credentials (PAT/SSH) securely using vault-encryption. | `kgg gitops repo add https://git.local/apps.git ghp_MyToken` |
 | `kgg gitops kargo init` | Provisions Kargo promotion pipelines on your cluster. | `kgg gitops kargo init` |

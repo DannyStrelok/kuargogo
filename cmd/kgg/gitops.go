@@ -64,18 +64,28 @@ var gitopsAppCmd = &cobra.Command{
 }
 
 var appNamespace, appBranch string
+var appChart, appChartVersion, appValuesFile, appValuesRepo, appValuesBranch string
 var gitopsAppAddCmd = &cobra.Command{
-	Use:   "add <project> <name> <repo> <path>",
+	Use:   "add <project> <name> <repo> [path]",
 	Short: "Add a new application to a project",
-	Args:  cobra.ExactArgs(4),
+	Args:  cobra.RangeArgs(3, 4),
 	Run: func(cmd *cobra.Command, args []string) {
-		projectName, appName, repo, path := args[0], args[1], args[2], args[3]
+		projectName, appName, repo := args[0], args[1], args[2]
+		var path string
+		if len(args) == 4 {
+			path = args[3]
+		}
 		app := config.GitOpsApp{
-			Name:      appName,
-			Repo:      repo,
-			Path:      path,
-			Namespace: appNamespace,
-			Branch:    appBranch,
+			Name:         appName,
+			Repo:         repo,
+			Path:         path,
+			Namespace:    appNamespace,
+			Branch:       appBranch,
+			Chart:        appChart,
+			ChartVersion: appChartVersion,
+			ValuesFile:   appValuesFile,
+			ValuesRepo:   appValuesRepo,
+			ValuesBranch: appValuesBranch,
 		}
 		if err := gitops.NewManager().AddApp(projectName, app); err != nil {
 			fmt.Printf("❌ Error: %v\n", err)
@@ -191,7 +201,16 @@ var gitopsListCmd = &cobra.Command{
 					if ns == "" {
 						ns = "default"
 					}
-					fmt.Printf("   └── 📦 %-15s [%s] -> %s (ns:%s)\n", a.Name, a.Repo, a.Path, ns)
+					var appTypeInfo string
+					if a.IsHelm() {
+						appTypeInfo = fmt.Sprintf("chart: %s@%s", a.Chart, a.ChartVersion)
+						if a.ValuesFile != "" {
+							appTypeInfo += fmt.Sprintf(" (values: %s)", a.ValuesFile)
+						}
+					} else {
+						appTypeInfo = fmt.Sprintf("path: %s", a.Path)
+					}
+					fmt.Printf("   └── 📦 %-15s [%s] -> %s (ns:%s)\n", a.Name, a.Repo, appTypeInfo, ns)
 				}
 			}
 		} // closing brace for if len(...) > 0
@@ -211,6 +230,11 @@ func init() {
 	gitopsCmd.AddCommand(gitopsAppCmd)
 	gitopsAppAddCmd.Flags().StringVarP(&appNamespace, "namespace", "n", "", "Target namespace")
 	gitopsAppAddCmd.Flags().StringVarP(&appBranch, "branch", "b", "main", "Git branch/revision")
+	gitopsAppAddCmd.Flags().StringVar(&appChart, "chart", "", "Helm chart name")
+	gitopsAppAddCmd.Flags().StringVar(&appChartVersion, "chart-version", "", "Helm chart version")
+	gitopsAppAddCmd.Flags().StringVar(&appValuesFile, "values-file", "", "Helm values file path")
+	gitopsAppAddCmd.Flags().StringVar(&appValuesRepo, "values-repo", "", "Git repository URL for Helm values file")
+	gitopsAppAddCmd.Flags().StringVar(&appValuesBranch, "values-branch", "main", "Git branch/revision for Helm values repo")
 	gitopsAppCmd.AddCommand(gitopsAppAddCmd)
 	gitopsAppCmd.AddCommand(gitopsAppRemoveCmd)
 

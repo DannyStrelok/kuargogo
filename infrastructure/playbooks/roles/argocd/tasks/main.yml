@@ -18,6 +18,10 @@
         cm:
           kustomize.buildOptions: "--enable-helm"
       repoServer:
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
         resources:
           requests:
             memory: "512Mi"
@@ -26,6 +30,10 @@
             memory: "1Gi"
             cpu: "1000m"
       server:
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
         resources:
           requests:
             memory: "256Mi"
@@ -44,6 +52,10 @@
       redis-ha:
         enabled: false
       controller:
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
         resources:
           requests:
             memory: "512Mi"
@@ -52,6 +64,10 @@
             memory: "1Gi"
             cpu: "1000m"
       applicationSet:
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
         resources:
           requests:
             memory: "128Mi"

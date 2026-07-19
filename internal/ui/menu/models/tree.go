@@ -2614,9 +2614,19 @@ func buildGitOpsManagementNode() MenuNode {
 						// Iterate over apps
 						for j, a := range currentProject.Apps {
 							appIndex := j
+							var appDesc string
+							if a.IsHelm() {
+								if a.ValuesFile != "" {
+									appDesc = fmt.Sprintf("Helm: %s@%s (values: %s)", a.Chart, a.ChartVersion, a.ValuesFile)
+								} else {
+									appDesc = fmt.Sprintf("Helm: %s@%s", a.Chart, a.ChartVersion)
+								}
+							} else {
+								appDesc = fmt.Sprintf("%s -> %s", a.Repo, a.Path)
+							}
 							appNodes = append(appNodes, MenuNode{
 								Title:       fmt.Sprintf("📦 App: %s", a.Name),
-								Description: fmt.Sprintf("%s -> %s", a.Repo, a.Path),
+								Description: appDesc,
 								DynamicChildren: func() []MenuNode {
 									return []MenuNode{
 										{
@@ -2631,18 +2641,55 @@ func buildGitOpsManagementNode() MenuNode {
 												var appPath = currentApp.Path
 												var appNamespace = currentApp.Namespace
 												var appBranch = currentApp.Branch
+												var appChart = currentApp.Chart
+												var appChartVersion = currentApp.ChartVersion
+												var appValuesFile = currentApp.ValuesFile
+												var appValuesRepo = currentApp.ValuesRepo
+												var appValuesBranch = currentApp.ValuesBranch
 
 												f := huh.NewForm(
 													huh.NewGroup(
 														huh.NewInput().Title("App Name").Value(&appName),
-														huh.NewInput().Title("Git Repository (HTTPS)").Value(&appRepo),
-														huh.NewInput().Title("Manifests Path").Value(&appPath),
+														huh.NewInput().Title("Git Repository (HTTPS) / Helm Repo").
+															Description("For Kustomize: git repository URL. For Helm: helm chart repository.").
+															Value(&appRepo),
+														huh.NewInput().Title("Manifests Path (Kustomize)").
+															Description("Relative path to manifests. Leave empty for Helm.").
+															Value(&appPath),
 														huh.NewInput().Title("Target Namespace").Value(&appNamespace),
-														huh.NewInput().Title("Branch").Value(&appBranch),
+														huh.NewInput().Title("Branch").
+															Description("Git branch/revision for Kustomize (e.g. main).").
+															Value(&appBranch),
+														huh.NewInput().Title("Helm Chart (Optional)").
+															Description("Helm chart name (e.g. redis). Leave empty for Kustomize.").
+															Value(&appChart),
+														huh.NewInput().Title("Helm Chart Version (Optional)").
+															Description("Required if Helm Chart is specified (e.g. 25.x).").
+															Value(&appChartVersion),
+														huh.NewInput().Title("Helm Values File (Optional)").
+															Description("Path to custom values file in Git repo (e.g., environments/dev/infra/redis-values.yaml).").
+															Value(&appValuesFile),
+														huh.NewInput().Title("Helm Values Repo (Optional)").
+															Description("Git repository URL containing the values file (required if values file is set).").
+															Value(&appValuesRepo),
+														huh.NewInput().Title("Helm Values Branch (Optional)").
+															Description("Git branch/revision for the values repo (required if values file is set).").
+															Value(&appValuesBranch),
 													),
 												)
 												return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
-													newApp := config.GitOpsApp{Name: appName, Repo: appRepo, Path: appPath, Namespace: appNamespace, Branch: appBranch}
+													newApp := config.GitOpsApp{
+														Name:         appName,
+														Repo:         appRepo,
+														Path:         appPath,
+														Namespace:    appNamespace,
+														Branch:       appBranch,
+														Chart:        appChart,
+														ChartVersion: appChartVersion,
+														ValuesFile:   appValuesFile,
+														ValuesRepo:   appValuesRepo,
+														ValuesBranch: appValuesBranch,
+													}
 													return actions.UpdateGitOpsApp(projectIndex, appIndex, newApp)
 												}))
 											},
@@ -2670,6 +2717,7 @@ func buildGitOpsManagementNode() MenuNode {
 							Title: "➕ Add New App",
 							Action: func() tea.Cmd {
 								var appName, appRepo, appPath, appNamespace, appBranch string
+								var appChart, appChartVersion, appValuesFile, appValuesRepo, appValuesBranch string
 								appBranch = "main"
 								f := huh.NewForm(
 									huh.NewGroup(
@@ -2679,19 +2727,51 @@ func buildGitOpsManagementNode() MenuNode {
 											}
 											return nil
 										}),
-										huh.NewInput().Title("Git Repository (HTTPS)").Value(&appRepo).Validate(func(s string) error {
-											if s == "" {
-												return errors.New("repo is required")
-											}
-											return nil
-										}),
-										huh.NewInput().Title("Manifests Path").Value(&appPath),
+										huh.NewInput().Title("Git Repository (HTTPS) / Helm Repo").
+											Description("For Kustomize: git repository URL. For Helm: helm chart repository.").
+											Value(&appRepo).Validate(func(s string) error {
+												if s == "" {
+													return errors.New("repo is required")
+												}
+												return nil
+											}),
+										huh.NewInput().Title("Manifests Path (Kustomize)").
+											Description("Relative path to manifests. Leave empty for Helm.").
+											Value(&appPath),
 										huh.NewInput().Title("Target Namespace").Value(&appNamespace),
-										huh.NewInput().Title("Branch").Value(&appBranch),
+										huh.NewInput().Title("Branch").
+											Description("Git branch/revision for Kustomize (e.g. main).").
+											Value(&appBranch),
+										huh.NewInput().Title("Helm Chart (Optional)").
+											Description("Helm chart name (e.g. redis). Leave empty for Kustomize.").
+											Value(&appChart),
+										huh.NewInput().Title("Helm Chart Version (Optional)").
+											Description("Required if Helm Chart is specified (e.g. 25.x).").
+											Value(&appChartVersion),
+										huh.NewInput().Title("Helm Values File (Optional)").
+											Description("Path to custom values file in Git repo (e.g., environments/dev/infra/redis-values.yaml).").
+											Value(&appValuesFile),
+										huh.NewInput().Title("Helm Values Repo (Optional)").
+											Description("Git repository URL containing the values file (required if values file is set).").
+											Value(&appValuesRepo),
+										huh.NewInput().Title("Helm Values Branch (Optional)").
+											Description("Git branch/revision for the values repo (required if values file is set).").
+											Value(&appValuesBranch),
 									),
 								)
 								return engine.Push(NewFormModel(f, func(form *huh.Form) tea.Cmd {
-									newApp := config.GitOpsApp{Name: appName, Repo: appRepo, Path: appPath, Namespace: appNamespace, Branch: appBranch}
+									newApp := config.GitOpsApp{
+										Name:         appName,
+										Repo:         appRepo,
+										Path:         appPath,
+										Namespace:    appNamespace,
+										Branch:       appBranch,
+										Chart:        appChart,
+										ChartVersion: appChartVersion,
+										ValuesFile:   appValuesFile,
+										ValuesRepo:   appValuesRepo,
+										ValuesBranch: appValuesBranch,
+									}
 									return actions.AddGitOpsApp(projectIndex, newApp)
 								}))
 							},

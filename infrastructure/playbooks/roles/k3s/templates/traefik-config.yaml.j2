@@ -5,6 +5,11 @@ metadata:
   namespace: kube-system
 spec:
   valuesContent: |-
+    metrics:
+      prometheus:
+        enabled: true
+        addEntryPointsLabels: true
+        addServicesLabels: true
     providers:
       kubernetesIngress:
         publishedService:
