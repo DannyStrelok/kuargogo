@@ -10,6 +10,8 @@
     update_repo_cache: true
     values:
       controller:
+        rollouts:
+          integrationEnabled: "{{ kargo_argo_rollouts_enabled | default(true) }}"
         resources:
           requests:
             memory: "256Mi"
@@ -18,6 +20,8 @@
             memory: "512Mi"
             cpu: "500m"
       api:
+        rollouts:
+          integrationEnabled: "{{ kargo_argo_rollouts_enabled | default(true) }}"
         resources:
           requests:
             memory: "128Mi"

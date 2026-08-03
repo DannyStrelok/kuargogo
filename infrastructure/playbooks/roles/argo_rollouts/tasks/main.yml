@@ -1,0 +1,33 @@
+---
+
+- name: Add Argo Helm repository
+  kubernetes.core.helm_repository:
+    name: argo
+    repo_url: "https://argoproj.github.io/argo-helm"
+
+- name: Deploy Argo Rollouts Controller & CRDs via Helm
+  kubernetes.core.helm:
+    name: argo-rollouts
+    chart_ref: argo/argo-rollouts
+    release_namespace: "{{ argo_rollouts_namespace }}"
+    create_namespace: true
+    chart_version: "{{ argo_rollouts_chart_version }}"
+    update_repo_cache: true
+    values:
+      installCRDs: true
+      dashboard:
+        enabled: "{{ argo_rollouts_dashboard_enabled }}"
+        ingress:
+          enabled: "{{ argo_rollouts_ingress_enabled }}"
+      controller:
+        metrics:
+          enabled: true
+          serviceMonitor:
+            enabled: true
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"

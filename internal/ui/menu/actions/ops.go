@@ -518,6 +518,44 @@ func OpsKargo() tea.Cmd {
 	}
 }
 
+// OpsArgoRollouts deploys the Argo Rollouts controller and CRDs.
+func OpsArgoRollouts() tea.Cmd {
+	return func() tea.Msg {
+		if err := deps.CheckAll("ansible", "ansible-playbook"); err != nil {
+			return ResultMsg{Output: fmt.Sprintf("❌ Error: %v\n\nPlease install Ansible first.", err)}
+		}
+
+		ch := make(chan string, 10)
+		go func() {
+			defer close(ch)
+			writer := NewProgressWriter(ch)
+
+			msg := "🚀 Starting Argo Rollouts deployment...\n"
+			if config.IsDryRun() {
+				msg = "🧪 [DRY RUN] Starting Argo Rollouts simulation...\n"
+			}
+			_, _ = writer.Write([]byte(msg))
+
+			var fullBuf bytes.Buffer
+			multiWriter := io.MultiWriter(writer, &fullBuf)
+
+			result, err := ansible.RunOpsArgoRollouts(config.IsDryRun(), nil, nil, multiWriter)
+			if err != nil {
+				ch <- fmt.Sprintf("\n❌ Deployment failed: %v", err)
+				return
+			}
+
+			if result.Success {
+				ch <- "\n✅ Argo Rollouts Controller & CRDs Deployed"
+			} else {
+				ch <- fmt.Sprintf("\n❌ Argo Rollouts deployment failed (exit code %d)", result.ExitCode)
+			}
+		}()
+
+		return ActionStartedMsg{ProgressChan: ch}
+	}
+}
+
 // OpsSetMasterPassphrase stores the master key and triggers a full config re-save (encryption).
 func OpsSetMasterPassphrase(passphrase string) tea.Cmd {
 	return func() tea.Msg {

@@ -491,6 +491,16 @@ func RunOpsKargo(dryRun bool, tags []string, extraVars map[string]string, output
 	return runPlaybook("ops-kargo.yml", "", dryRun, tags, extraVars, output, false)
 }
 
+// RunOpsArgoRollouts executes the ops-argo-rollouts.yml playbook to install Argo Rollouts controller and CRDs.
+func RunOpsArgoRollouts(dryRun bool, tags []string, extraVars map[string]string, output io.Writer) (*Result, error) {
+	if extraVars == nil {
+		cfg := config.GetConfig()
+		extraVars = getGitOpsExtraVars(cfg)
+	}
+	return runPlaybook("ops-argo-rollouts.yml", "", dryRun, tags, extraVars, output, false)
+}
+
+
 // getNFSExtraVars builds the common set of extra-vars required for NFS support across playbooks.
 func getNFSExtraVars(cfg config.ClusterConfig) map[string]string {
 	vars := map[string]string{
@@ -516,6 +526,8 @@ func getGitOpsExtraVars(cfg config.ClusterConfig) map[string]string {
 
 	// User preference: .homelab for internal routing
 	vars["argocd_ingress_host"] = "argocd.homelab"
+
+	vars["kargo_argo_rollouts_enabled"] = "true"
 
 	if cfg.GitOps.KargoEngine != nil {
 		if cfg.GitOps.KargoEngine.AdminPasswordHash != "" {

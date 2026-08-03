@@ -508,6 +508,13 @@ func buildGitOpsAndPlatformServicesNode() MenuNode {
 				},
 			},
 			{
+				Title:       "Deploy Argo Rollouts",
+				Description: "Progressive delivery controller & CRDs (Canary/Blue-Green)",
+				Action: func() tea.Cmd {
+					return engine.Push(NewOutputModel(actions.OpsArgoRollouts()))
+				},
+			},
+			{
 				Title:       "Deploy Observability Stack",
 				Description: "Prometheus, Grafana, and Loki (LGTM)",
 				Action: func() tea.Cmd {

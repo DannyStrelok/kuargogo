@@ -106,6 +106,18 @@ Example:
 	RunE: runOpsKargo,
 }
 
+var opsArgoRolloutsCmd = &cobra.Command{
+	Use:   "argo-rollouts",
+	Short: "Deploy Argo Rollouts controller and CRDs",
+	Long: `Executes the ops-argo-rollouts.yml playbook to install the Argo Rollouts controller and CRDs.
+This enables progressive delivery (Canary, Blue-Green, AnalysisRun) for your pipelines.
+
+Example:
+  kgg ops argo-rollouts --notify`,
+	RunE: runOpsArgoRollouts,
+}
+
+
 var opsBackupCmd = &cobra.Command{
 	Use:   "backup-system",
 	Short: "Deploy Velero Disaster Recovery system",
@@ -170,6 +182,7 @@ func init() {
 
 	opsCmd.AddCommand(opsArgoCDCmd)
 	opsCmd.AddCommand(opsKargoCmd)
+	opsCmd.AddCommand(opsArgoRolloutsCmd)
 	opsCmd.AddCommand(opsBackupCmd)
 	opsCmd.AddCommand(opsRestoreListCmd)
 	opsRestoreTriggerCmd.Flags().StringSliceVar(&restoreNamespaces, "ns", nil, "Limit restoration to specific namespaces (comma-separated)")
@@ -557,6 +570,36 @@ func runOpsKargo(cmd *cobra.Command, args []string) error {
 		fmt.Printf("\n✅ Kargo Promotion Engine deployed successfully in %s%s\n", result.Duration.Round(time.Second), passMsg)
 	} else {
 		fmt.Printf("\n❌ Kargo deployment failed (exit code: %d) in %s\n", result.ExitCode, result.Duration.Round(time.Second))
+	}
+
+	sendNotification(result)
+	return nil
+}
+
+func runOpsArgoRollouts(cmd *cobra.Command, args []string) error {
+	if err := deps.CheckAll("ansible", "ansible-playbook"); err != nil {
+		return err
+	}
+
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Suffix = " Deploying Argo Rollouts Controller & CRDs..."
+	s.Start()
+
+	var buf bytes.Buffer
+	result, err := ansible.RunOpsArgoRollouts(DryRun, nil, nil, &buf)
+
+	s.Stop()
+	fmt.Print(buf.String())
+
+	if err != nil {
+		sendNotification(result)
+		return fmt.Errorf("argo-rollouts deployment failed: %w", err)
+	}
+
+	if result.Success {
+		fmt.Printf("\n✅ Argo Rollouts Controller & CRDs deployed successfully in %s\n", result.Duration.Round(time.Second))
+	} else {
+		fmt.Printf("\n❌ Argo Rollouts deployment failed (exit code: %d) in %s\n", result.ExitCode, result.Duration.Round(time.Second))
 	}
 
 	sendNotification(result)

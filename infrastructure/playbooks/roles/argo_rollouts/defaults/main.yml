@@ -1,0 +1,5 @@
+---
+argo_rollouts_namespace: "argo-rollouts"
+argo_rollouts_chart_version: "2.41.1"
+argo_rollouts_dashboard_enabled: true
+argo_rollouts_ingress_enabled: false

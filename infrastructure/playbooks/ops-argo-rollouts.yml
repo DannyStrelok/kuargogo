@@ -1,0 +1,6 @@
+---
+- name: Deploy Argo Rollouts Controller & CRDs
+  hosts: server[0]
+  become: true
+  roles:
+    - argo_rollouts
