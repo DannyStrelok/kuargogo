@@ -1,0 +1,161 @@
+# .golangci.yml - Kuargogo AI Harness & Quality Guardrails
+# Schema version: 2 (golangci-lint v2 / 1.6x+)
+version: "2"
+
+run:
+  issues-exit-code: 1
+  tests: true
+
+linters:
+  default: none
+  enable:
+    # --- Correctness & Bug Prevention ---
+    - bodyclose      # Checks whether HTTP response bodies are closed
+    - copyloopvar    # Detects places where loop variables are copied (Go 1.22+)
+    - errcheck       # Ensures errors are checked
+    - errorlint      # AI Guardrail: Enforces %w wrapping & errors.Is/errors.As (AGENTS.md)
+    - ineffassign    # Detects ineffectual assignments
+    - sqlclosecheck  # Checks that sql.Rows and sql.Statements are closed
+    - staticcheck    # Advanced Go static analysis
+    - unused         # Flags unused constants, variables, functions, and types
+    - wastedassign   # Finds wasted assignment statements
+
+    # --- Architectural & AGENTS.md Hard Guardrails ---
+    - depguard       # AI Guardrail: Enforces package boundaries (internal/* must not import cmd/*)
+    - forbidigo      # AI Guardrail: Forbids fmt.Println/fmt.Printf & os.Exit in internal/* (AGENTS.md)
+
+    # --- Code Health, Security & Complexity ---
+    - gocyclo        # Cyclomatic complexity threshold
+    - gosec          # AST-based security vulnerability scanner
+    - govet          # Go standard analyzer
+    - misspell       # Corrects commonly misspelled words
+    - nolintlint     # Enforces explanations and specific rules on //nolint directives
+    - revive         # Fast, configurable Go linter (style & best practices)
+    - unconvert      # Removes unnecessary type conversions
+
+  settings:
+    # 1. Architecture Isolation (AGENTS.md)
+    depguard:
+      rules:
+        prevent-cmd-in-internal:
+          files:
+            - "**/internal/**"
+            - '**\internal\**'
+          deny:
+            - pkg: github.com/DannyStrelok/kuargogo/cmd
+              desc: "Architecture violation: internal packages must never import cmd/kgg (AGENTS.md)"
+
+    # 2. Hard Forbidden Patterns in internal/* (AGENTS.md)
+    forbidigo:
+      forbid:
+        - pattern: '^(fmt\.Print|fmt\.Println|fmt\.Printf)$'
+          pkg: '^github\.com/DannyStrelok/kuargogo/internal/.*'
+          msg: "Do not use fmt.Print* in internal/. Use io.Writer (s.Output) or return errors (AGENTS.md)"
+        - pattern: '^os\.Exit$'
+          pkg: '^github\.com/DannyStrelok/kuargogo/internal/.*'
+          msg: "Do not use os.Exit in internal/. Return an error instead (AGENTS.md)"
+
+    # 3. Error Handling (AGENTS.md: fmt.Errorf(\"context: %w\", err))
+    errorlint:
+      errorf: true
+      asserts: true
+      comparison: true
+
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+
+    gocyclo:
+      min-complexity: 45
+
+    misspell:
+      locale: US
+      ignore-words:
+        - mosquitto
+        - Mosquitto
+
+    # 4. Security exclusions for CLI/TUI Orchestration
+    gosec:
+      excludes:
+        - G101 # Hardcoded credentials false positives in constants/configs
+        - G107 # Variable URL in HTTP requests (webhooks/API calls)
+        - G110 # Potential DoS via decompression bomb (self-updater)
+        - G117 # Struct field matches secret pattern
+        - G204 # Subprocess launched with variable arguments (Ansible/Kubectl orchestrator)
+        - G306 # WriteFile permissions (0644 for user configs/artifacts)
+        - G401 # Weak cryptographic primitive (MD5 used for cache/URL hashing)
+        - G404 # Weak random number generator (math/rand used for wizard naming)
+        - G501 # Weak cryptographic primitive import (MD5 used for cache/URL hashing)
+        - G702 # Command injection via taint analysis (local CLI orchestrator)
+        - G703 # Path traversal via taint analysis
+        - G704 # SSRF via taint analysis
+        - G705 # XSS via taint analysis
+        - G706 # Log injection via taint analysis
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: false
+
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+          disabled: true
+        - name: if-return
+        - name: increment-decrement
+        - name: var-naming
+          disabled: true
+        - name: package-comments
+          disabled: true
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gocyclo
+          - gosec
+        path: (_test\.go|mocks\.go)
+      - linters:
+          - misspell
+        text: "(?i)mosquitto"
+      - linters:
+          - gocyclo
+        path: (internal/ui/menu/models/tree\.go|internal/config/validate\.go)
+    paths:
+      - generated
+      - third_party$
+      - builtin$
+      - examples$
+      - website/node_modules
+      - node_modules
+
+formatters:
+  enable:
+    # Enforces imports order: 1. stdlib, 2. third-party, 3. internal (AGENTS.md)
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/DannyStrelok/kuargogo)
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - website/node_modules
+      - node_modules
